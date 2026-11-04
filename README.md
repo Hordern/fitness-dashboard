@@ -7,6 +7,11 @@ Withings scales and JEFIT (gym logging) into Postgres, runs a deterministic
 coaching rules engine over it, and uses Claude to explain the engine's
 decisions, review every run and gym session, and answer questions in chat.
 
+<p>
+  <img src="docs/screenshots/overview.png" alt="Dashboard: fitness metrics, next run and next gym workout" width="73%">
+  <img src="docs/screenshots/mobile.png" alt="The same page on a phone" width="24%">
+</p>
+
 **What's on the page**
 
 - **Fitness**: training readiness, HRV, resting heart rate and training load.
@@ -22,6 +27,22 @@ decisions, review every run and gym session, and answer questions in chat.
 
 The page is read-only to the public. Anything that changes data or spends API
 credit (chats, Sync now, check-ins) needs a passkey (Face ID / Touch ID) or a PIN.
+
+## Screenshots
+
+**Running plan with the coach's review of each run.** Claude writes these at
+7pm from the full Garmin data: laps, heart rate, decoupling, weather, recovery.
+
+![Running plan with coach comments](docs/screenshots/running-plan.png)
+
+**Each gym session against the plan,** with the double-progression target for
+next time.
+
+![Gym session compared with the plan](docs/screenshots/lifting.png)
+
+**Trends:** sleep, weight, body battery and 14-day recovery charts.
+
+![Trends](docs/screenshots/trends.png)
 
 ## Architecture
 

@@ -316,8 +316,15 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
 /* Fitness: 4 across on wide screens, 2×2 in between, stacked on phones. */
 .cards-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (min-width: 1180px) { .cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .cards-4 { grid-template-columns: minmax(0, 1fr); } }
-.status-line .status-name { min-width: 0; }
+/* Phones: keep the four as a compact 2×2, with the gauge under the number. */
+@media (max-width: 560px) {
+  .cards-4 { gap: 10px; }
+  .cards-4 .card { padding: 14px 14px 16px; }
+  .cards-4 .metric { flex-direction: column; align-items: flex-start; gap: 8px; min-height: 0; }
+  .cards-4 .when { display: none; }
+  .cards-4 .caption { font-size: 12px; }
+}
+.status-line .status-name { min-width: 0; flex: none; }
 
 /* Next gym workout: one line per exercise with its target. */
 .next-ex { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
