@@ -118,7 +118,7 @@ export function mountAuth(app, express) {
   app.post("/api/auth/passkey/register/options", requireAuth, handle(async (req, res) => {
     const existing = (await getSetting(PASSKEYS)) ?? [];
     const options = await generateRegistrationOptions({
-      rpName: "Daniel's Health Dashboard", rpID: rp(req).rpID,
+      rpName: "Daniel's Fitness Dashboard", rpID: rp(req).rpID,
       userName: "daniel", userDisplayName: "Daniel Hordern",
       userID: new TextEncoder().encode("daniel"),
       attestationType: "none",

@@ -110,7 +110,7 @@ async function systemPrompt(topic) {
     { type: "text", text: `# Daniel's coach rules\n\n${rules ?? ""}` },
     { type: "text", text: `# Athlete profile\n\n${profile ?? ""}`, cache_control: { type: "ephemeral" } },
     { type: "text", text:
-      `${p.brief}\n\nYou're chatting with Daniel on his health dashboard. The first message has a snapshot of his data; use the tools ` +
+      `${p.brief}\n\nYou're chatting with Daniel on his fitness dashboard. The first message has a snapshot of his data; use the tools ` +
       `for full detail before commenting on a specific run or session, and quote the numbers you rely on. If he attaches screenshots, read ` +
       `them alongside the data. Facts come from the data or his screenshots: if something isn't there, say so rather than guessing. ` +
       `Be direct and specific like a good coach in conversation; short paragraphs or a few bullets, no long reports unless he asks. ` +

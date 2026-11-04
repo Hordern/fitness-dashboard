@@ -1,4 +1,4 @@
-# Health Dashboard
+# Fitness Dashboard
 
 A personal health and training dashboard. It pulls data from a Garmin watch,
 Withings scales and JEFIT (gym logging) into Postgres, runs a deterministic

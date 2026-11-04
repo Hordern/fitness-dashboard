@@ -38,7 +38,7 @@ const meta = {
 };
 
 function buildServer({ canWrite }) {
-  const server = new McpServer({ name: "daniel-health-dashboard", version: "1.1.0" });
+  const server = new McpServer({ name: "daniel-fitness-dashboard", version: "1.1.0" });
 
   server.registerTool("athlete_context", {
     description: "Daniel's athlete profile and his running coach's rules (progression rules, HR guides, how to review runs). Read this first so answers use the same coaching standards as the dashboard's daily note.",

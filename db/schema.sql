@@ -1,4 +1,4 @@
--- Health dashboard schema. Safe to re-run: every statement is idempotent.
+-- Fitness dashboard schema. Safe to re-run: every statement is idempotent.
 
 -- Small key/value store for OAuth tokens, coach instructions and similar.
 create table if not exists settings (

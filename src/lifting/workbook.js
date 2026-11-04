@@ -39,7 +39,7 @@ export async function liftingWorkbook(today) {
   const inBlock = sessions.filter((s) => s.date >= block.start);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Daniel's Health Dashboard";
+  wb.creator = "Daniel's Fitness Dashboard";
   wb.calcProperties.fullCalcOnLoad = true; // Excel/Sheets compute the formulas on open
 
   // ---- Current block ----

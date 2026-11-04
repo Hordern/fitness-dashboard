@@ -27,7 +27,7 @@ app.use((req, res, next) => {
   const [, encoded = ""] = (req.headers.authorization ?? "").split(" ");
   const supplied = Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":");
   if (supplied === password) return next();
-  res.set("WWW-Authenticate", 'Basic realm="Health dashboard"').status(401).send("Password required");
+  res.set("WWW-Authenticate", 'Basic realm="Fitness dashboard"').status(401).send("Password required");
 });
 
 app.get("/robots.txt", (_req, res) => res.type("text/plain").send("User-agent: *\nDisallow: /\n"));
