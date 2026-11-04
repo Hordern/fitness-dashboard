@@ -42,7 +42,10 @@ can't answer.
 ![Running plan with coach comments](docs/screenshots/running-plan.png)
 
 **Each gym session against the plan,** with the double-progression target for
-next time.
+next time. A workout done in two parts (later the same day, or part 2 the next
+day) shows as one workout. A short session on its own isn't assumed to be a part
+1, because it may just be a shortened workout. Parts are joined only when the
+next session is the same plan session with different exercises.
 
 ![Gym session compared with the plan](docs/screenshots/lifting.png)
 

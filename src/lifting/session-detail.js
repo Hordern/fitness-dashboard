@@ -4,7 +4,7 @@
 // workout. The lifting equivalent of run-analysis.js.
 
 import { query } from "../db.js";
-import { analyseSession, getLiftingPlan } from "./analysis.js";
+import { analyseSession, getLiftingPlan, joinParts } from "./analysis.js";
 
 const TZ = process.env.TZ ?? "Australia/Melbourne";
 const r1 = (n) => (n == null || Number.isNaN(n) ? null : Math.round(n * 10) / 10);
@@ -62,30 +62,40 @@ async function garminFor(session) {
   return a ? { start: a.start_local.slice(11, 16), minutes: Number(a.minutes), avg_hr: a.avg_hr, max_hr: a.max_hr, training_load: r1(Number(a.load)), calories: Number(a.calories) || null } : null;
 }
 
+// One session, or a workout joined from parts (analysis.js joinParts): the
+// exercises are the joined ones; time, totals and Garmin HR are per part.
 export async function liftSessionDetail(session, { plan, history } = {}) {
   plan ??= await getLiftingPlan();
-  const raw = session.raw ?? {};
+  const parts = session.parts ?? [session];
+  const lastDate = parts.at(-1).date;
   // In the order they were done (JEFIT lists them by when they were added).
   const firstAt = (e) => Math.min(...(e.sets ?? []).map((st) => st.at ?? Infinity));
   const exercises = [...session.exercises].sort((a, b) => firstAt(a) - firstAt(b)).map(exerciseDetail);
-  history ??= await query(`select id, date::text, name, exercises from gym_sessions where date <= $1 and date >= $1::date - 120 order by date desc`, [session.date]);
+  history ??= joinParts(await query(`select id, date::text, name, exercises from gym_sessions where date <= $1 and date >= $1::date - 120`, [lastDate]), plan);
   const check = plan?.sessions ? analyseSession(session, plan, history) : null;
-  const times = session.exercises.flatMap((e) => (e.sets ?? []).map((s) => s.at)).filter(Boolean);
+  const sum = (field) => (parts.some((p) => p.raw?.[field]) ? Math.round(parts.reduce((a, p) => a + (p.raw?.[field] ?? 0), 0) / 60) : null);
+  const partTime = (p) => {
+    const times = p.exercises.flatMap((e) => (e.sets ?? []).map((st) => st.at)).filter(Boolean);
+    return times.length ? `${clock(Math.min(...times))}–${clock(Math.max(...times))}` : null;
+  };
+  const garmin = await Promise.all(parts.map(garminFor));
   return {
     date: session.date,
     jefit_day: session.name,
     plan_session: check?.plan_session ?? null,
-    time: times.length ? `${clock(Math.min(...times))}–${clock(Math.max(...times))}` : null,
+    // A workout done in parts: each part's date, time and exercises.
+    ...(parts.length > 1
+      ? { parts: parts.map((p, i) => ({ part: i + 1, date: p.date, time: partTime(p), exercises: p.exercises.map((e) => e.name), garmin: garmin[i] })) }
+      : { time: partTime(session), garmin: garmin[0] }),
     totals: {
-      minutes: raw.total_time ? Math.round(raw.total_time / 60) : null,
-      working_minutes: raw.workout_time ? Math.round(raw.workout_time / 60) : null,
-      rest_minutes: raw.rest_time ? Math.round(raw.rest_time / 60) : null,
+      minutes: sum("total_time"),
+      working_minutes: sum("workout_time"),
+      rest_minutes: sum("rest_time"),
       working_sets: exercises.reduce((a, e) => a + e.working_sets, 0),
       volume_kg: exercises.reduce((a, e) => a + e.volume_kg, 0),
-      jefit_exertion: raw.exertion ?? null,
-      records_broken: raw.records_broken ?? null,
+      jefit_exertion: parts.length === 1 ? (session.raw?.exertion ?? null) : parts.map((p) => p.raw?.exertion ?? null),
+      records_broken: parts.reduce((a, p) => a + (p.raw?.records_broken ?? 0), 0) || null,
     },
-    garmin: await garminFor(session),
     exercises,
     vs_plan: check && { exercises: check.exercises, missing: check.missing, extra: check.extra, summary: check.summary },
     history: await exerciseHistory(session.exercises.map((e) => e.name), session.date),
@@ -93,7 +103,7 @@ export async function liftSessionDetail(session, { plan, history } = {}) {
 }
 
 export async function liftSessionsBetween(from, to) {
-  const rows = await query(`select id, date::text, name, exercises, raw from gym_sessions where date between $1 and $2 order by date`, [from, to]);
+  const rows = await query(`select id, date::text, name, exercises, raw from gym_sessions where date between $1 and $2`, [from, to]);
   const plan = await getLiftingPlan();
-  return Promise.all(rows.map((s) => liftSessionDetail(s, { plan })));
+  return Promise.all(joinParts(rows, plan).reverse().map((w) => liftSessionDetail(w, { plan })));
 }

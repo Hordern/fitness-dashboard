@@ -101,7 +101,71 @@ function compareExercise(pe, je, previous) {
   };
 }
 
-// A JEFIT session compared with its plan session. `history` is earlier sessions
+// A workout is sometimes done in two parts: two JEFIT sessions on the same day,
+// or part 2 the next day. A short session on its own may just be a shortened
+// workout, so it's never assumed to be a part 1. Parts are joined only when the
+// next gym session is the same plan session, on the same or the next day, and
+// is mostly different exercises (not a repeat of the same workout).
+const startOf = (s) => Number(s.raw?.date ?? s.id); // JEFIT's local id is the start time in epoch seconds
+const dayGap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+
+function joinTwo(workout, part) {
+  const exercises = workout.exercises.map((e) => ({ ...e, sets: [...(e.sets ?? [])] }));
+  for (const e of part.exercises) {
+    const same = exercises.find((x) => norm(x.name) === norm(e.name));
+    if (same) same.sets.push(...(e.sets ?? []));
+    else exercises.push(e);
+  }
+  return { ...workout, exercises, parts: [...workout.parts, part] };
+}
+
+function isNextPart(workout, s, plan) {
+  if (dayGap(workout.parts.at(-1).date, s.date) > 1) return false;
+  const shared = s.exercises.filter((e) => workout.exercises.some((x) => norm(x.name) === norm(e.name))).length;
+  if (shared * 2 >= s.exercises.length) return false;
+  const name = classify(workout, plan)?.session.name;
+  return name != null && classify(s, plan)?.session.name === name;
+}
+
+// Sessions (any order) → workouts, newest first. A workout keeps the first
+// part's id and date, the joined exercises, and its parts.
+export function joinParts(sessions, plan) {
+  const workouts = [];
+  for (const s of [...sessions].sort((a, b) => startOf(a) - startOf(b))) {
+    const last = workouts.at(-1);
+    if (last && isNextPart(last, s, plan)) workouts[workouts.length - 1] = joinTwo(last, s);
+    else workouts.push({ ...s, parts: [s] });
+  }
+  return workouts.reverse();
+}
+
+const ids = (w) => w.parts.map((p) => p.id);
+const sameIds = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+// The plan check frozen at 7pm covers these parts (checks from before parts existed cover their own session).
+const checkedParts = (part) => part.plan_check?.part_ids ?? (part.plan_check ? [part.id] : []);
+export const isFrozen = (w) => w.parts.every((p) => sameIds(checkedParts(p), ids(w)));
+
+// When a part 2 turns up after part 1 was checked on its own, part 1's
+// exercises keep their frozen results (the plan may have progressed since) and
+// only the new exercises are compared now. Returns the check and those new exercises.
+export function checkWorkout(w, plan, history) {
+  const live = analyseSession(w, plan, history);
+  const frozen = new Map(w.parts.flatMap((p) => p.plan_check?.exercises ?? []).map((e) => [e.exercise, e]));
+  const exercises = live.exercises.map((e) => frozen.get(e.exercise) ?? e);
+  const fresh = live.exercises.filter((e) => !frozen.has(e.exercise));
+  return { check: { ...live, exercises, summary: summarise(exercises), part_ids: ids(w) }, fresh };
+}
+
+const summarise = (exercises) => ({
+  on_plan: exercises.filter((e) => e.status === "on_plan").length,
+  progress_ready: exercises.filter((e) => e.status === "progress_ready").length,
+  below: exercises.filter((e) => ["below_range", "under_load"].includes(e.status)).length,
+  improved: exercises.filter((e) => ["load_up", "reps_up"].includes(e.progress?.kind)).length,
+});
+
+const clock = (epoch) => new Date(epoch * 1000).toLocaleTimeString("en-GB", { timeZone: process.env.TZ ?? "Australia/Melbourne", hour: "2-digit", minute: "2-digit" });
+
+// A JEFIT session (or a workout of joined parts) compared with its plan session. `history` is earlier sessions
 // (newest first) used to find "last time" for each exercise.
 export function analyseSession(session, plan, history) {
   const cls = classify(session, plan);
@@ -128,12 +192,7 @@ export function analyseSession(session, plan, history) {
   return {
     date: session.date, jefit_name: session.name, plan_session: cls.session.name, planned_weekday: cls.session.weekday,
     exercises, missing, extra,
-    summary: {
-      on_plan: exercises.filter((e) => e.status === "on_plan").length,
-      progress_ready: exercises.filter((e) => e.status === "progress_ready").length,
-      below: exercises.filter((e) => ["below_range", "under_load"].includes(e.status)).length,
-      improved: exercises.filter((e) => ["load_up", "reps_up"].includes(e.progress?.kind)).length,
-    },
+    summary: summarise(exercises),
   };
 }
 
@@ -142,13 +201,17 @@ export function analyseSession(session, plan, history) {
 export async function recentLifting(days = 14) {
   const plan = await getLiftingPlan();
   if (!plan?.sessions) return { plan: plan ?? null, sessions: [] };
-  const history = await query(`select id, date::text, name, exercises, coach_comment, plan_check from gym_sessions where date >= current_date - $1::int - 60 order by date desc`, [days]);
+  const rows = await query(`select id, date::text, name, exercises, raw->'date' as raw_date, coach_comment, plan_check from gym_sessions where date >= current_date - $1::int - 60`, [days]);
+  const history = joinParts(rows.map(({ raw_date, ...s }) => ({ ...s, raw: { date: raw_date } })), plan);
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-  // A checked session keeps the comparison frozen on the night it was checked;
-  // older ones are compared with the current plan (marked live).
-  const sessions = history.filter((s) => s.date >= cutoff).map((s) => ({
-    id: s.id, coach_comment: s.coach_comment,
-    ...(s.plan_check ? { ...s.plan_check, frozen: true } : { ...analyseSession(s, plan, history), frozen: false }),
+  // A checked workout keeps the comparison frozen on the night it was checked;
+  // others are compared with the current plan (marked live).
+  const sessions = history.filter((w) => w.parts.at(-1).date >= cutoff).map((w) => ({
+    id: w.id,
+    // One comment per review; a part 1 reviewed alone keeps its own comment.
+    coach_comments: [...new Set(w.parts.map((p) => p.coach_comment).filter(Boolean))],
+    parts: w.parts.length > 1 ? w.parts.map((p) => ({ date: p.date, time: clock(startOf(p)) })) : undefined,
+    ...(isFrozen(w) ? { ...w.parts.at(-1).plan_check, frozen: true } : { ...checkWorkout(w, plan, history).check, frozen: false }),
   }));
   return { plan, sessions };
 }

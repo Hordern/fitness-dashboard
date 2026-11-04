@@ -424,7 +424,13 @@ function renderLiftingPlan(lifting) {
   draw((plan.sessions.find((s) => s.weekday === todayWd) ?? plan.sessions[0]).name);
 }
 
-// Gym: each session as its plan session, every exercise against the plan,
+// "2 parts, 06:59 and 11:26" or "part 1 Tue, part 2 Wed".
+const partsText = (parts) => parts.every((p) => p.date === parts[0].date)
+  ? `${parts.length} parts, ${parts.map((p) => p.time).join(" and ")}`
+  : parts.map((p, i) => `part ${i + 1} ${asDate(p.date).toLocaleDateString("en-AU", { weekday: "short" })}`).join(", ");
+const isoDaysAgo = (n) => { const d = asDate(todayIso()); d.setDate(d.getDate() - n); return d.toLocaleDateString("en-CA"); };
+
+// Gym: each workout as its plan session (two-part workouts joined), every exercise against the plan,
 // progress since last time, and the coach's comment. Latest 4, rest behind a toggle.
 function renderLiftSessions(lifting) {
   if (!lifting?.sessions?.length) return;
@@ -434,18 +440,18 @@ function renderLiftSessions(lifting) {
         <div class="row-date"><b>${relDay(s.date)}</b>${fmtShort(s.date)}</div>
         <div class="row-main">
           <div class="row-title">${esc(s.plan_session ?? s.jefit_name ?? "Workout")}${s.plan_session && s.planned_weekday && asDate(s.date).toLocaleDateString("en-AU", { weekday: "short" }).slice(0, 3) !== s.planned_weekday ? ` <span class="muted">(planned ${s.planned_weekday})</span>` : ""}</div>
-          <div class="row-detail">${s.summary ? `${s.summary.on_plan + s.summary.progress_ready} of ${s.exercises.length} on plan · ${s.summary.improved} improved${s.summary.progress_ready ? ` · ${s.summary.progress_ready} ready to add load` : ""}${s.summary.below ? ` · ${s.summary.below} below` : ""}` : ""}${s.frozen ? "" : ' · <span title="Compared with the current plan; sessions are frozen once checked at 7pm">live</span>'}</div>
+          <div class="row-detail">${s.parts ? `${esc(partsText(s.parts))} · ` : ""}${s.summary ? `${s.summary.on_plan + s.summary.progress_ready} of ${s.exercises.length} on plan · ${s.summary.improved} improved${s.summary.progress_ready ? ` · ${s.summary.progress_ready} ready to add load` : ""}${s.summary.below ? ` · ${s.summary.below} below` : ""}` : ""}${s.frozen ? "" : ' · <span title="Compared with the current plan; sessions are frozen once checked at 7pm">live</span>'}</div>
         </div>
         <span class="chev">›</span>
       </summary>
-      ${s.coach_comment ? `<div class="comment">${esc(s.coach_comment)}</div>` : ""}
+      ${(s.coach_comments ?? []).map((c, i, all) => `<div class="comment">${all.length > 1 ? `<strong>Part ${i + 1}${i ? "" : " on its own"}:</strong> ` : ""}${esc(c)}</div>`).join("")}
       <div class="table-scroll"><table class="weeks lift-table">
         <tr><th>Exercise</th><th>Plan</th><th>Done</th><th>Vs plan</th><th>Vs last time</th><th>Next</th></tr>
         ${s.exercises.map((e) => `<tr><td>${esc(e.exercise)}</td>
           <td>${e.prescribed.load_kg != null ? `${e.prescribed.load_kg} kg ` : ""}${esc(e.prescribed.sets)} × ${esc(e.prescribed.reps)}</td>
           <td>${esc(e.done)}</td><td>${liftChip(e.status)}</td><td>${progressText(e.progress)}</td><td>${esc(e.next.text)}</td></tr>`).join("")}
       </table></div>
-      ${s.missing?.length ? `<div class="caption">Not done: ${esc(s.missing.map((m) => m.exercise).join(", "))}</div>` : ""}
+      ${s.missing?.length ? `<div class="caption">Not done: ${esc(s.missing.map((m) => m.exercise).join(", "))}${s === lifting.sessions[0] && !s.parts && s.date >= isoDaysAgo(1) ? ". If you do these as a part 2 today or tomorrow, it joins this workout." : ""}</div>` : ""}
       ${s.extra?.length ? `<div class="caption">Extra (not in plan): ${esc(s.extra.join(", "))}</div>` : ""}
     </details>`;
   const rest = lifting.sessions.slice(4);

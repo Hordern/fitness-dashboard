@@ -14,6 +14,7 @@ import { activeBlock, recentChanges, updatePlanDay } from "../plan/store.js";
 import { blockStatus } from "../plan/status.js";
 import { runsBetween } from "./run-analysis.js";
 import { liftSessionDetail } from "../lifting/session-detail.js";
+import { joinParts } from "../lifting/analysis.js";
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 const AUTHOR = "nightly-coach";
@@ -58,12 +59,27 @@ async function context(day) {
     gym_sessions: await query(`select date::text, name, exercises from gym_sessions where date >= current_date - 14 order by date`),
     // Sessions checked against the lifting plan (by the lifting check) but not yet commented on.
     // Each with its full detail: every set and rest, volume, e1RM, drop-off, history, Garmin HR.
-    lifting_sessions_to_review: await Promise.all((await query(
-      `select id, date::text, name, exercises, raw, plan_check from gym_sessions where plan_check is not null and coach_comment is null and date >= current_date - 3 order by date`,
-    )).map(async (s) => ({ id: s.id, date: s.date, plan_check: s.plan_check, detail: await liftSessionDetail(s) }))),
+    // A workout done in two parts is one item; a part 1 already reviewed on its
+    // own day comes back joined with its part 2, to review the whole workout.
+    lifting_sessions_to_review: await liftingToReview(),
     lifting_block: (await getSetting("lifting_plan"))?.block ?? null,
     previous_notes: await query(`select date::text, body from coaching_notes where date >= current_date - 7 order by date`),
   };
+}
+
+// Workouts with an unreviewed part, each with its plan check and full detail.
+async function liftingToReview() {
+  const plan = await getSetting("lifting_plan");
+  const rows = await query(`select id, date::text, name, exercises, raw, plan_check, coach_comment from gym_sessions where date >= current_date - 4`);
+  const workouts = plan?.sessions ? joinParts(rows, plan) : rows.map((s) => ({ ...s, parts: [s] }));
+  return Promise.all(workouts.reverse()
+    .filter((w) => w.parts.every((p) => p.plan_check) && w.parts.some((p) => !p.coach_comment) && w.parts.at(-1).date >= new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10))
+    .map(async (w) => ({
+      id: w.parts.at(-1).id, date: w.date, plan_check: w.parts.at(-1).plan_check,
+      ...(w.parts.length > 1 && { parts_note: `Done in ${w.parts.length} parts${w.parts.some((p) => p.coach_comment) ? "; part 1 was reviewed on its own before part 2 was done, review the whole workout now" : ""}` }),
+      part_ids: w.parts.map((p) => p.id),
+      detail: await liftSessionDetail(w, { plan }),
+    })));
 }
 
 export async function runNightlyCoach() {
@@ -107,11 +123,11 @@ export async function runNightlyCoach() {
   );
 
   // Apply only what the coach is allowed to touch; anything else is reported, not applied.
-  const liftIds = new Set(data.lifting_sessions_to_review.map((s) => s.id));
+  const partsOf = new Map(data.lifting_sessions_to_review.map((s) => [s.id, s.part_ids]));
   let lifted = 0;
   for (const l of out.lift_reviews) {
-    if (!liftIds.has(l.session_id)) continue;
-    await query(`update gym_sessions set coach_comment = $2 where id = $1`, [l.session_id, l.comment]);
+    if (!partsOf.has(l.session_id)) continue;
+    await query(`update gym_sessions set coach_comment = $2 where id = any($1) and coach_comment is null`, [partsOf.get(l.session_id), l.comment]);
     lifted++;
   }
   const reviewable = new Set(data.reviewable_days.map((d) => d.date));
