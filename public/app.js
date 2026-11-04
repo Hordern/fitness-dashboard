@@ -133,22 +133,30 @@ function renderHealth({ health, weights }) {
   const stages = sleep && [["Deep", sleep.deep_s, "--sleep"], ["Light", sleep.light_s, "--hrv"], ["REM", sleep.rem_s, "--ready"], ["Awake", sleep.awake_s, "--weight"]];
   const stageTotal = stages ? stages.reduce((s, [, v]) => s + (v ?? 0), 0) : 0;
 
-  $("healthCards").innerHTML = [
+  // Fitness: what says how ready you are to train. Everything else goes in Trends.
+  $("fitnessCards").innerHTML = [
     metricCard({
       title: "Readiness", icon: "gauge", color: "--ready", date: ready?.date,
       value: ready?.readiness_score, viz: ready && ring(ready.readiness_score, 100, "--ready"),
       caption: ready ? `${chip(ready.readiness_level)} Garmin training readiness` : waiting,
     }),
     metricCard({
-      title: "Resting Heart Rate", icon: "heart", color: "--heart", date: rhr?.date,
+      title: "HRV", icon: "wave", color: "--hrv", date: hrv?.date,
+      value: hrv?.hrv_last_night, unit: "ms", viz: sparkline(health.map((h) => h.hrv_last_night), "--hrv"),
+      caption: hrv ? `${chip(hrv.hrv_status)} overnight average` : waiting,
+    }),
+    metricCard({
+      title: "Resting HR", icon: "heart", color: "--heart", date: rhr?.date,
       value: rhr?.resting_hr, unit: "bpm", viz: sparkline(health.map((h) => h.resting_hr), "--heart"),
       caption: rhrs.length ? `14-day average ${Math.round(avg(rhrs))} bpm` : waiting,
     }),
     metricCard({
-      title: "Heart Rate Variability", icon: "wave", color: "--hrv", date: hrv?.date,
-      value: hrv?.hrv_last_night, unit: "ms", viz: sparkline(health.map((h) => h.hrv_last_night), "--hrv"),
-      caption: hrv ? `${chip(hrv.hrv_status)} overnight average` : waiting,
+      title: "Training Load", icon: "load", color: "--load", date: load?.date,
+      value: load?.acute_load, viz: sparkline(health.map((h) => h.acute_load), "--load"),
+      caption: load ? "Acute load, 7-day weighted" : waiting,
     }),
+  ].join("");
+  $("trendCards").innerHTML = [
     `<div class="card">
       <div class="card-head">${label("Sleep", "moon", "--sleep")}<span class="when">${sleep ? relDay(sleep.date) : ""}</span></div>
       <div class="metric">
@@ -160,19 +168,14 @@ function renderHealth({ health, weights }) {
         : `<div class="caption">${waiting}</div>`}
     </div>`,
     metricCard({
-      title: "Body Battery", icon: "load", color: "--ready", date: battery?.date,
-      value: battery?.body_battery, viz: battery && ring(battery.body_battery, 100, "--ready", `${battery.body_battery}`),
-      caption: battery ? `Wake ${battery.body_battery_wake ?? "—"} · high ${battery.body_battery_high ?? "—"} · low ${battery.body_battery_low ?? "—"}` : waiting,
-    }),
-    metricCard({
       title: "Weight", icon: "scale", color: "--weight", date: w?.measured_at,
       value: w?.weight_kg?.toFixed(1), unit: "kg", viz: sparkline(weights.filter((x) => new Date(x.measured_at) > Date.now() - 90 * 86_400_000).map((x) => x.weight_kg), "--weight"),
       caption: weekAgo ? `${w.weight_kg - weekAgo.weight_kg >= 0 ? "+" : "−"}${Math.abs(w.weight_kg - weekAgo.weight_kg).toFixed(1)} kg vs a week earlier` : w ? "Withings scales" : "Waiting for the first Withings weigh-in",
     }),
     metricCard({
-      title: "Training Load", icon: "load", color: "--load", date: load?.date,
-      value: load?.acute_load, viz: sparkline(health.map((h) => h.acute_load), "--load"),
-      caption: load ? "Acute load, 7-day weighted" : waiting,
+      title: "Body Battery", icon: "load", color: "--ready", date: battery?.date,
+      value: battery?.body_battery, viz: battery && ring(battery.body_battery, 100, "--ready", `${battery.body_battery}`),
+      caption: battery ? `Wake ${battery.body_battery_wake ?? "—"} · high ${battery.body_battery_high ?? "—"} · low ${battery.body_battery_low ?? "—"}` : waiting,
     }),
   ].join("");
 }
@@ -700,11 +703,13 @@ function renderStatus(status) {
   $("lastSync").textContent = latest ? `Updated ${relTime(latest)}` : "Not synced yet";
   $("syncList").innerHTML = status.sources.map((s) => `<span><span class="dot" style="--c: var(${s.last_ok_flag ? "--ok" : "--bad"})"></span> ${esc(SOURCE_LABELS[s.source] ?? s.source)}</span>`).join("");
 
+  let problems = 0;
   const rows = Object.keys(SOURCE_LABELS).map((key) => {
     const s = status.sources.find((x) => x.source === key);
     if (!s) return "";
     const stale = STALE_HOURS[key] && s.last_ok && Date.now() - new Date(s.last_ok) > STALE_HOURS[key] * 3_600_000;
     const color = !s.last_ok_flag ? "--bad" : stale ? "--warn" : "--ok";
+    if (color !== "--ok") problems++;
     return `<div class="status-row" title="${esc(s.last_message ?? "")}">
       <span class="dot" style="--c: var(${color})"></span>
       <span class="status-name">${SOURCE_LABELS[key]}</span>
@@ -712,15 +717,23 @@ function renderStatus(status) {
     </div>`;
   }).join("");
   const edit = status.plan_last_edit;
+  // Collapsed: one line with the overall state, the next sync and Sync now. Open: each source.
   $("dataStatus").innerHTML = `
-    <div class="card-head">${label("Data status", "spark", "--muted")}
-      <button class="btn" id="syncNow" ${status.syncing ? "disabled" : ""}>${status.syncing ? "Syncing…" : "Sync now"}</button></div>
-    <div class="status-grid">${rows}
-      <div class="status-row"><span class="dot" style="--c: var(--run)"></span><span class="status-name">Running plan</span>
-        <span class="muted">${edit ? `edited ${relTime(edit.at)} by ${esc(edit.author)}` : "no edits yet"}</span></div>
-    </div>
-    <div class="caption">Next sync ${status.next_sync ? clock(status.next_sync) : "—"} · syncs at 6am, 9am, 3pm, 7pm (with the coach) and 10pm</div>`;
-  $("syncNow").onclick = syncNow;
+    <summary class="card-head status-line">
+      <span class="status-row"><span class="dot" style="--c: var(${problems ? "--warn" : "--ok"})"></span>
+        <span class="status-name">Data</span>
+        <span class="muted">${problems ? `${problems} source${problems > 1 ? "s" : ""} need${problems > 1 ? "" : "s"} attention` : `up to date${latest ? ` · ${relTime(latest)}` : ""}`} · next sync ${status.next_sync ? clock(status.next_sync) : "—"}</span></span>
+      <span><button class="btn" id="syncNow" ${status.syncing ? "disabled" : ""}>${status.syncing ? "Syncing…" : "Sync now"}</button><span class="chev">›</span></span>
+    </summary>
+    <div class="collapsible-body">
+      <div class="status-grid">${rows}
+        <div class="status-row"><span class="dot" style="--c: var(--run)"></span><span class="status-name">Running plan</span>
+          <span class="muted">${edit ? `edited ${relTime(edit.at)} by ${esc(edit.author)}` : "no edits yet"}</span></div>
+      </div>
+      <div class="caption">Syncs at 6am, 9am, 3pm, 7pm (with the coach) and 10pm</div>
+    </div>`;
+  // The button sits in the summary, so stop it opening/closing the panel.
+  $("syncNow").onclick = (e) => { e.preventDefault(); syncNow(); };
 }
 
 // Sync now (needs sign-in), then poll until it's done and reload.

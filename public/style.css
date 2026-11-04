@@ -308,3 +308,14 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
 .sign-in .btn { width: 100%; margin-top: 8px; }
 .sign-in .chat-form .btn { width: auto; }
 .btn-quiet { background: none; color: var(--muted); }
+
+/* Data status, collapsed to one line. */
+.status-card { padding-top: 10px; padding-bottom: 10px; }
+.status-line { margin-bottom: 0; }
+.status-line .status-row { flex: 1; }
+.status-line > span:last-child { display: flex; align-items: center; flex: none; }
+/* Fitness: 4 across on wide screens, 2×2 in between, stacked on phones. */
+.cards-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1180px) { .cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .cards-4 { grid-template-columns: minmax(0, 1fr); } }
+.status-line .status-name { min-width: 0; }
