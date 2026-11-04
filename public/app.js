@@ -707,18 +707,18 @@ function renderCharts({ weeks, days, health, weights, runs }) {
   });
 }
 
-// Weight chart with a 3M / 1Y / All switch. Longer ranges label by month and year.
+// Weight chart with Week / Month / 3 months pills under it (Month by default).
 let weightChart;
 function renderWeightChart(weights) {
   if (noData("weightChart", [{ data: weights.map((w) => w.weight_kg) }], "Waiting for the first Withings weigh-in")) return;
   const draw = (days) => {
-    const since = days ? Date.now() - days * 86_400_000 : 0;
-    const shown = weights.filter((w) => new Date(w.measured_at) >= since);
-    const fmt = days && days <= 120 ? fmtShort : (d) => asDate(d).toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+    const shown = weights.filter((w) => new Date(w.measured_at) >= Date.now() - days * 86_400_000);
+    const change = shown.length > 1 ? shown.at(-1).weight_kg - shown[0].weight_kg : null;
+    $("weightWhen").textContent = change == null ? "" : `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(1)} kg`;
     weightChart?.destroy();
     weightChart = new Chart($("weightChart"), {
       type: "line",
-      data: { labels: shown.map((w) => fmt(w.measured_at)), datasets: [{ label: "Weight (kg)", data: shown.map((w) => w.weight_kg), borderColor: css("--weight"), backgroundColor: "transparent", borderWidth: 1.8 }] },
+      data: { labels: shown.map((w) => fmtShort(w.measured_at)), datasets: [{ label: "Weight (kg)", data: shown.map((w) => w.weight_kg), borderColor: css("--weight"), backgroundColor: "transparent", borderWidth: 1.8, pointRadius: days <= 7 ? 3 : 0 }] },
       options: { scales: axes(), plugins: { legend: { display: false } } },
     });
   };
@@ -726,7 +726,7 @@ function renderWeightChart(weights) {
   for (const b of buttons) {
     b.onclick = () => { buttons.forEach((x) => x.classList.toggle("on", x === b)); draw(Number(b.dataset.days)); };
   }
-  draw(365);
+  draw(31);
 }
 
 // ---------- Status, alerts, navigation ----------

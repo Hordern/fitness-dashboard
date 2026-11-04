@@ -97,12 +97,11 @@
           <div class="chart"><canvas id="readinessChart"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-head"><span class="label" style="--c: var(--weight)">Weight</span>
-            <div class="segmented" id="weightRange">
-              <button data-days="90">3M</button><button data-days="365" class="on">1Y</button><button data-days="0">All</button>
-            </div>
-          </div>
+          <div class="card-head"><span class="label" style="--c: var(--weight)">Weight</span><span class="when" id="weightWhen"></span></div>
           <div class="chart"><canvas id="weightChart"></canvas></div>
+          <div class="chart-range"><div class="segmented" id="weightRange">
+            <button data-days="7">Week</button><button data-days="31" class="on">Month</button><button data-days="92">3 months</button>
+          </div></div>
         </div>
         <div class="card">
           <div class="card-head"><span class="label" style="--c: var(--sleep)">Sleep stages</span><span class="when">7 nights</span></div>

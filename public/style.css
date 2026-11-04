@@ -234,6 +234,7 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
 
 .chart { position: relative; height: 220px; }
 /* Small pill switch, e.g. the weight chart's 3M / 1Y / All. */
+.chart-range { display: flex; justify-content: center; margin-top: 10px; }
 .segmented { display: inline-flex; background: var(--track); border-radius: 999px; padding: 2px; }
 .segmented button { border: none; background: transparent; color: var(--muted); font: 600 12px var(--sans); padding: 4px 10px; border-radius: 999px; cursor: pointer; }
 .segmented button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(28, 25, 23, 0.12); }
