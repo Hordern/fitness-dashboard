@@ -126,7 +126,6 @@ function renderHealth({ health, weights }) {
   const load = latest("acute_load");
   const battery = latest("body_battery");
   const w = weights.at(-1);
-  const weekAgo = w && [...weights].reverse().find((x) => new Date(x.measured_at) <= new Date(new Date(w.measured_at) - 6 * 86_400_000));
   const rhrs = nums(health, "resting_hr");
 
   const sleepTime = sleep && hrMin(sleep.sleep_s);
@@ -167,17 +166,38 @@ function renderHealth({ health, weights }) {
         <div class="legend">${stages.map(([n, v, c]) => `<span><i style="background: var(${c})"></i>${n} ${hm(v)}</span>`).join("")}</div>`
         : `<div class="caption">${waiting}</div>`}
     </div>`,
-    metricCard({
-      title: "Weight", icon: "scale", color: "--weight", date: w?.measured_at,
-      value: w?.weight_kg?.toFixed(1), unit: "kg", viz: sparkline(weights.filter((x) => new Date(x.measured_at) > Date.now() - 90 * 86_400_000).map((x) => x.weight_kg), "--weight"),
-      caption: weekAgo ? `${w.weight_kg - weekAgo.weight_kg >= 0 ? "+" : "−"}${Math.abs(w.weight_kg - weekAgo.weight_kg).toFixed(1)} kg vs a week earlier` : w ? "Withings scales" : "Waiting for the first Withings weigh-in",
-    }),
+    `<div class="card">
+      <div class="card-head">${label("Weight", "scale", "--weight")}<span class="when">${w && w.measured_at.slice(0, 10) !== todayIso() ? relDay(w.measured_at) : ""}</span></div>
+      <div class="metric">
+        <div><span class="big">${w ? w.weight_kg.toFixed(1) : "—"}</span>${w ? '<span class="unit">kg</span>' : ""}</div>
+        <span id="weightSpark"></span>
+      </div>
+      <div class="caption" id="weightCaption">${w ? "" : "Waiting for the first Withings weigh-in"}</div>
+      ${weights.length > 1 ? `<div class="chart-range"><div class="segmented" id="weightCardRange">
+        <button data-days="7">Week</button><button data-days="31" class="on">Month</button><button data-days="92">3 months</button>
+      </div></div>` : ""}
+    </div>`,
     metricCard({
       title: "Body Battery", icon: "load", color: "--ready", date: battery?.date,
       value: battery?.body_battery, viz: battery && ring(battery.body_battery, 100, "--ready", `${battery.body_battery}`),
       caption: battery ? `Wake ${battery.body_battery_wake ?? "—"} · high ${battery.body_battery_high ?? "—"} · low ${battery.body_battery_low ?? "—"}` : waiting,
     }),
   ].join("");
+  if (weights.length > 1) weightCardRange(weights);
+}
+
+// Trends → Weight card: the sparkline and the change over the chosen range.
+function weightCardRange(weights) {
+  const words = { 7: "the week", 31: "the month", 92: "3 months" };
+  const draw = (days) => {
+    const shown = weights.filter((x) => new Date(x.measured_at) >= Date.now() - days * 86_400_000);
+    $("weightSpark").innerHTML = sparkline(shown.map((x) => x.weight_kg), "--weight");
+    const change = shown.length > 1 ? shown.at(-1).weight_kg - shown[0].weight_kg : null;
+    $("weightCaption").textContent = change == null ? "No weigh-ins in this range" : `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(1)} kg over ${words[days]}`;
+  };
+  const buttons = [...document.querySelectorAll("#weightCardRange button")];
+  for (const b of buttons) b.onclick = () => { buttons.forEach((x) => x.classList.toggle("on", x === b)); draw(Number(b.dataset.days)); };
+  draw(31);
 }
 
 // ---------- Coach's note (small markdown renderer: headings, bold, lists) ----------
