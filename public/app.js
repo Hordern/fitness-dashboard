@@ -340,20 +340,51 @@ const liftChip = (status) => { const [t, c] = LIFT_STATUS[status] ?? [status, "-
 const progressText = (p) => (!p ? "" : `<span class="${["load_up", "reps_up"].includes(p.kind) ? "up" : ["load_down", "reps_down"].includes(p.kind) ? "down" : "muted"}">${esc(p.text)}</span>`);
 const prescription = (e) => `${e.load_kg != null ? `${e.load_note && /about/.test(e.load_note) ? "~" : ""}${e.load_kg} kg ` : ""}${e.sets_min === e.sets_max ? e.sets_min : `${e.sets_min}–${e.sets_max}`} × ${e.reps_min}–${e.reps_max}${e.load_note && !/about/.test(e.load_note) ? ` (${e.load_note})` : ""}`;
 
+// The most recent time an exercise was done in a plan session (sessions are newest first).
+function lastTimeFor(sessions, sessionName, exName) {
+  for (const s of sessions) {
+    if (s.plan_session !== sessionName) continue;
+    const e = s.exercises.find((x) => x.exercise === exName);
+    if (e) return { ...e, date: s.date };
+  }
+  return null;
+}
+
+// Training → Next gym workout: the first session this week not trained yet
+// (today's counts once it's logged), else next week's first. Each exercise
+// shows its next target from last time, or the prescription.
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function renderNextGym(lifting) {
+  const card = $("nextGymCard");
+  const head = (when = "") => `<div class="card-head">${label("Next gym workout", "dumbbell", "--gym")}<span class="when">${when}</span></div>`;
+  if (!lifting?.plan) return (card.innerHTML = `${head()}<div class="empty">No lifting plan yet.</div>`);
+  const { plan, week, sessions } = lifting;
+  const today = asDate(todayIso());
+  const todayIdx = today.getDay() || 7; // Sunday ends the week
+  const monday = new Date(today); monday.setDate(today.getDate() - todayIdx + 1);
+  const idx = (wd) => WEEKDAYS.indexOf(wd) || 7;
+  const todays = week.find((w) => idx(w.weekday) === todayIdx && w.dates.length);
+  const upcoming = week.find((w) => idx(w.weekday) >= todayIdx && !w.dates.length);
+  const name = upcoming?.session ?? plan.sessions[0].name;
+  const ps = plan.sessions.find((x) => x.name === name);
+  const date = new Date(monday); date.setDate(monday.getDate() + idx(ps.weekday) - 1 + (upcoming ? 0 : 7));
+  const iso = date.toLocaleDateString("en-CA");
+  card.innerHTML = `${head(relDay(iso))}
+    <div class="block-title">${esc(ps.name)}${ps.variation ? ` <span class="muted">· ${esc(ps.variation)}</span>` : ""}</div>
+    ${ps.parts.flatMap((part) => part.exercises).map((e) => {
+      const last = lastTimeFor(sessions, ps.name, e.name);
+      return `<div class="next-ex"><span>${esc(e.name)}</span><span class="muted">${esc(last ? last.next.text : prescription(e))}</span></div>`;
+    }).join("")}
+    ${todays ? `<div class="caption">Today: ${esc(todays.session)} ${todays.state === "done" ? "done" : `${todays.exercises_done} of ${todays.exercises_total} exercises done`}</div>` : ""}`;
+}
+
 // Coach → Lifting plan: the block, key lifts, this week vs the template, and each
 // session's prescriptions with the last result and the next target.
 function renderLiftingPlan(lifting) {
   if (!lifting?.plan) return;
   const { plan, block, week, sessions } = lifting;
   $("liftingWhen").innerHTML = `${esc(block?.name ?? "Lifting")} · week ${block?.week ?? "–"} <span class="chev">›</span>`;
-  const latestFor = (sessionName, exName) => {
-    for (const s of sessions) {
-      if (s.plan_session !== sessionName) continue;
-      const e = s.exercises.find((x) => x.exercise === exName);
-      if (e) return { ...e, date: s.date };
-    }
-    return null;
-  };
+  const latestFor = (sessionName, exName) => lastTimeFor(sessions, sessionName, exName);
   const stateColor = { done: "--ok", partial: "--warn", not_yet: "--muted" };
   const draw = (name) => {
     const ps = plan.sessions.find((s) => s.name === name);
@@ -1092,6 +1123,7 @@ async function main() {
   renderPlan(data);
   renderPlanChanges(data.planChanges ?? []);
   renderLiftingPlan(data.lifting);
+  renderNextGym(data.lifting);
   renderActivities(data.recent);
   renderBlock(data.block, data.blockProgress);
   renderGymPlan(data.gymPlan, data.gymLastDone ?? {});

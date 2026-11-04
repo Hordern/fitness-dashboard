@@ -86,7 +86,6 @@ section:first-of-type h2 { margin-top: 0; }
 .cards { display: grid; gap: 14px; margin-bottom: 14px; }
 .cards-3 { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
 .cards-2 { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
-.cards-week { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); }
 .card {
   background: var(--card); border-radius: 22px; padding: 16px 18px 18px; box-shadow: var(--shadow);
   margin-bottom: 14px; min-width: 0; transition: transform 0.2s, box-shadow 0.2s;
@@ -288,7 +287,7 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .sidebar nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
   .sidebar a { white-space: nowrap; padding: 7px 12px; font-size: 14px; }
   main { padding-top: 22px; }
-  .cards-week, .cards-2 { grid-template-columns: 1fr; }
+  .cards-2 { grid-template-columns: 1fr; }
   h1 { font-size: 36px; }
   .avatar { width: 64px; height: 64px; font-size: 24px; }
   .big { font-size: 34px; }
@@ -319,3 +318,7 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
 @media (min-width: 1180px) { .cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .cards-4 { grid-template-columns: minmax(0, 1fr); } }
 .status-line .status-name { min-width: 0; }
+
+/* Next gym workout: one line per exercise with its target. */
+.next-ex { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.next-ex .muted { text-align: right; }
