@@ -54,8 +54,6 @@
         <div class="card" id="nextCard"></div>
         <div class="card" id="nextGymCard"></div>
       </div>
-      <!-- Pain and RPE: Garmin doesn't record them, and the PAIN flag depends on them. -->
-      <div class="card" id="checkin"></div>
       <div class="card" id="weekCard"></div>
       <div class="card" id="blockCard"></div>
       <div class="cards cards-2">
@@ -72,6 +70,9 @@
         <div class="card-head"><span class="label" style="--c: var(--run)">Recent activity</span><span class="when">last 10 days</span></div>
         <div id="activityList"></div>
       </div>
+      <!-- Pain and RPE: Garmin doesn't record them, and the PAIN flag depends on them.
+           An occasional input, so one line that opens into the form. -->
+      <details class="card collapsible checkin-card" id="checkin"></details>
     </section>
 
     <section id="gym">

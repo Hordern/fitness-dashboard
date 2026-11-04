@@ -784,27 +784,36 @@ async function syncNow() {
 }
 
 // Today's check-in: pain during the run and next morning (0–10), RPE (1–10).
+// Collapsed to one line: what's logged today, or a prompt; it opens into the form.
 function renderCheckin(checkins) {
   const today = todayIso();
   const c = checkins.find((x) => x.date === today) ?? {};
   const pick = (name, max, min = 0) => `<select name="${name}"><option value="">–</option>${Array.from({ length: max - min + 1 }, (_, i) => i + min)
     .map((v) => `<option ${c[name] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+  const v = (n) => (n == null || n === "" ? "–" : n); // blank selects come back as ""
+  const summary = (x) => `pain ${v(x.pain_during)} during, ${v(x.pain_next_morning)} next morning · RPE ${v(x.rpe)}`;
   const recent = checkins.filter((x) => x.date !== today).slice(0, 5);
   $("checkin").innerHTML = `
-    <div class="card-head">${label("Today's check-in", "heart", "--coach")}<span class="when">${c.date ? "saved" : "pain flag needs this"}</span></div>
-    <form id="checkinForm" class="checkin-form">
-      <label>Pain during run ${pick("pain_during", 10)}</label>
-      <label>Pain this morning ${pick("pain_next_morning", 10)}</label>
-      <label>Session RPE ${pick("rpe", 10, 1)}</label>
-      <input name="note" placeholder="Note (optional)" value="${esc(c.note ?? "")}">
-      <button class="btn" type="submit">Save</button>
-    </form>
-    ${recent.length ? `<div class="caption">${recent.map((r) => `${fmtShort(r.date)}: pain ${r.pain_during ?? "–"}/${r.pain_next_morning ?? "–"}, RPE ${r.rpe ?? "–"}`).join(" · ")}</div>` : ""}`;
+    <summary class="card-head">${label("Check-in", "heart", "--coach")}
+      <span class="when" id="checkinWhen">${c.date ? `Today: ${summary(c)}` : "Log pain and effort"} <span class="chev">›</span></span></summary>
+    <div class="collapsible-body">
+      <form id="checkinForm" class="checkin-form">
+        <label>Pain during run ${pick("pain_during", 10)}</label>
+        <label>Pain this morning ${pick("pain_next_morning", 10)}</label>
+        <label>Session RPE ${pick("rpe", 10, 1)}</label>
+        <input name="note" placeholder="Note (optional)" value="${esc(c.note ?? "")}">
+        <button class="btn" type="submit">Save</button>
+      </form>
+      <div class="caption">The pain flag in the recovery check depends on this; Garmin doesn't record pain.</div>
+      ${recent.length ? `<div class="caption">${recent.map((r) => `${fmtShort(r.date)}: ${summary(r)}`).join("<br>")}</div>` : ""}
+    </div>`;
   $("checkinForm").onsubmit = async (e) => {
     e.preventDefault();
     try {
-      await coachApi("/checkin", "POST", { date: today, ...Object.fromEntries(new FormData(e.target)) });
-      $("checkin").querySelector(".when").textContent = "saved";
+      const values = Object.fromEntries(new FormData(e.target));
+      await coachApi("/checkin", "POST", { date: today, ...values });
+      $("checkinWhen").innerHTML = `Today: ${summary(values)} <span class="chev">›</span>`;
+      $("checkin").open = false;
     } catch (err) { alert(err.message); }
   };
 }
