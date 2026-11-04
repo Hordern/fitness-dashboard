@@ -30,6 +30,12 @@ credit (chats, Sync now, check-ins) needs a passkey (Face ID / Touch ID) or a PI
 
 ## Screenshots
 
+**The nightly coach's note.** Claude explains the rules engine's decisions,
+reviews the day's training and recovery, and asks about anything the data
+can't answer.
+
+![Coach's note](docs/screenshots/coach-note.png)
+
 **Running plan with the coach's review of each run.** Claude writes these at
 7pm from the full Garmin data: laps, heart rate, decoupling, weather, recovery.
 
