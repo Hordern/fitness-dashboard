@@ -106,7 +106,7 @@ const chip = (word) => (word ? `<span class="chip" style="--c: var(${statusColor
 
 function metricCard({ title, icon, color, date, value, unit, viz, caption }) {
   return `<div class="card">
-    <div class="card-head">${label(title, icon, color)}<span class="when">${date ? relDay(date) : ""}</span></div>
+    <div class="card-head">${label(title, icon, color)}<span class="when">${date && date.slice(0, 10) !== todayIso() ? relDay(date) : ""}</span></div>
     <div class="metric">
       <div><span class="big">${value ?? "—"}</span>${value != null && unit ? `<span class="unit">${unit}</span>` : ""}</div>
       ${viz ?? ""}
@@ -138,12 +138,12 @@ function renderHealth({ health, weights }) {
     metricCard({
       title: "Readiness", icon: "gauge", color: "--ready", date: ready?.date,
       value: ready?.readiness_score, viz: ready && ring(ready.readiness_score, 100, "--ready"),
-      caption: ready ? `${chip(ready.readiness_level)} Garmin training readiness` : waiting,
+      caption: ready ? `${chip(ready.readiness_level)}<span class="hide-narrow"> training readiness</span>` : waiting,
     }),
     metricCard({
       title: "HRV", icon: "wave", color: "--hrv", date: hrv?.date,
       value: hrv?.hrv_last_night, unit: "ms", viz: sparkline(health.map((h) => h.hrv_last_night), "--hrv"),
-      caption: hrv ? `${chip(hrv.hrv_status)} overnight average` : waiting,
+      caption: hrv ? `${chip(hrv.hrv_status)} overnight` : waiting,
     }),
     metricCard({
       title: "Resting HR", icon: "heart", color: "--heart", date: rhr?.date,
@@ -153,7 +153,7 @@ function renderHealth({ health, weights }) {
     metricCard({
       title: "Training Load", icon: "load", color: "--load", date: load?.date,
       value: load?.acute_load, viz: sparkline(health.map((h) => h.acute_load), "--load"),
-      caption: load ? "Acute load, 7-day weighted" : waiting,
+      caption: load ? 'Acute load<span class="hide-narrow">, 7-day weighted</span>' : waiting,
     }),
   ].join("");
   $("trendCards").innerHTML = [
@@ -370,12 +370,12 @@ function renderNextGym(lifting) {
   const date = new Date(monday); date.setDate(monday.getDate() + idx(ps.weekday) - 1 + (upcoming ? 0 : 7));
   const iso = date.toLocaleDateString("en-CA");
   card.innerHTML = `${head(relDay(iso))}
-    <div class="block-title">${esc(ps.name)}${ps.variation ? ` <span class="muted">· ${esc(ps.variation)}</span>` : ""}</div>
+    <div class="block-title">${esc(ps.name)}</div>
     ${ps.parts.flatMap((part) => part.exercises).map((e) => {
       const last = lastTimeFor(sessions, ps.name, e.name);
       return `<div class="next-ex"><span>${esc(e.name)}</span><span class="muted">${esc(last ? last.next.text : prescription(e))}</span></div>`;
     }).join("")}
-    ${todays ? `<div class="caption">Today: ${esc(todays.session)} ${todays.state === "done" ? "done" : `${todays.exercises_done} of ${todays.exercises_total} exercises done`}</div>` : ""}`;
+    ${todays ? `<div class="caption">Today: ${esc(todays.session)}, ${todays.state === "done" ? "done" : `${todays.exercises_done} of ${todays.exercises_total} exercises done`}</div>` : ""}`;
 }
 
 // Coach → Lifting plan: the block, key lifts, this week vs the template, and each
@@ -732,7 +732,6 @@ const STALE_HOURS = { garmin: 8, withings: 26, jefit: 26 };
 function renderStatus(status) {
   const latest = status.sources.reduce((a, s) => (!a || s.last_ok > a ? s.last_ok : a), null);
   $("lastSync").textContent = latest ? `Updated ${relTime(latest)}` : "Not synced yet";
-  $("syncList").innerHTML = status.sources.map((s) => `<span><span class="dot" style="--c: var(${s.last_ok_flag ? "--ok" : "--bad"})"></span> ${esc(SOURCE_LABELS[s.source] ?? s.source)}</span>`).join("");
 
   let problems = 0;
   const rows = Object.keys(SOURCE_LABELS).map((key) => {
@@ -753,7 +752,7 @@ function renderStatus(status) {
     <summary class="card-head status-line">
       <span class="status-row"><span class="dot" style="--c: var(${problems ? "--warn" : "--ok"})"></span>
         <span class="status-name">Data</span>
-        <span class="muted">${problems ? `${problems} source${problems > 1 ? "s" : ""} need${problems > 1 ? "" : "s"} attention` : `up to date${latest ? ` · ${relTime(latest)}` : ""}`} · next sync ${status.next_sync ? clock(status.next_sync) : "—"}</span></span>
+        <span class="muted">${problems ? `${problems} source${problems > 1 ? "s" : ""} need${problems > 1 ? "" : "s"} attention` : `up to date${latest ? ` · ${relTime(latest)}` : ""}`}<span class="hide-narrow"> · next sync ${status.next_sync ? clock(status.next_sync) : "—"}</span></span></span>
       <span><button class="btn" id="syncNow" ${status.syncing ? "disabled" : ""}>${status.syncing ? "Syncing…" : "Sync now"}</button><span class="chev">›</span></span>
     </summary>
     <div class="collapsible-body">
@@ -1107,12 +1106,16 @@ function setupAsk() {
 // Highlight the sidebar link for the section currently on screen.
 function trackSections() {
   const links = [...document.querySelectorAll("#nav a")];
+  // At the top of the page the first section is current, whatever else is in view.
+  const atTop = () => { if (scrollY < 80) links.forEach((a, i) => a.classList.toggle("active", i === 0)); };
   const observer = new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (e.isIntersecting) links.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === `#${e.target.id}`));
     }
+    atTop();
   }, { rootMargin: "-30% 0px -60% 0px" });
   document.querySelectorAll("main section").forEach((s) => observer.observe(s));
+  addEventListener("scroll", atTop, { passive: true });
 }
 
 async function main() {

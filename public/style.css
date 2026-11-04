@@ -67,8 +67,6 @@ a { color: inherit; }
 .sidebar a:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
 .sidebar a.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
-.sidebar-foot { margin-top: auto; padding: 10px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
-.sidebar-foot .dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; }
 .sync-bad { color: var(--bad); }
 
 main { min-width: 0; padding-top: 36px; }
@@ -283,7 +281,7 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 12px 16px; }
   .sidebar { position: sticky; top: 8px; z-index: 5; height: auto; padding: 6px; border-radius: 18px; min-width: 0; } /* min-width lets the pill bar scroll instead of widening the page */
-  .brand, .sidebar-foot { display: none; }
+  .brand { display: none; }
   .sidebar nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
   .sidebar a { white-space: nowrap; padding: 7px 12px; font-size: 14px; }
   main { padding-top: 22px; }
@@ -323,6 +321,8 @@ details p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .cards-4 .metric { flex-direction: column; align-items: flex-start; gap: 8px; min-height: 0; }
   .cards-4 .when { display: none; }
   .cards-4 .caption { font-size: 12px; }
+  .cards-4 svg.viz { height: 52px; width: auto; } /* rings shrink to the sparklines' height */
+  .hide-narrow { display: none; }
 }
 .status-line .status-name { min-width: 0; flex: none; }
 
