@@ -13,6 +13,7 @@ import { isSyncing, requestSync } from "./sync.js";
 import { localDate, nextSync } from "./schedule.js";
 import { TYPE_LABEL } from "./coach/review.js";
 import { liftingBlock, recentLifting, weekAdherence } from "./lifting/analysis.js";
+import { DASHBOARD, maxHistoryDays } from "./dashboard-config.js";
 import { liftingWorkbook } from "./lifting/workbook.js";
 import { mountAuth, requireAuth } from "./auth.js";
 import { ask, closeChat, latestChat } from "./coach/ask.js";
@@ -88,10 +89,10 @@ app.get("/api/dashboard", async (_req, res, next) => {
                     (select round(avg(avg_hr)) from activities a where a.date = p.date and a.type = 'running') as actual_hr,
                     (select round(sum(duration_s) / 60) from activities a where a.date = p.date and a.type = 'running') as actual_min
              from plan_days p join plan_weeks w on w.start_date = p.week_start order by date`),
-      query(`select * from health_daily where date > current_date - 14 order by date`),
+      query(`select * from health_daily where date > current_date - $1::int order by date`, [maxHistoryDays]),
       // Full history (about a reading a day, so ~1,000 rows); the page picks the range to show.
       query(`select measured_at, weight_kg, fat_ratio, muscle_kg from weights order by measured_at`),
-      query(`select date, distance_km, avg_hr from activities where type = 'running' and date >= (select min(start_date) from plan_weeks) order by start_local`),
+      query(`select date, distance_km, avg_hr from activities where type = 'running' and date > current_date - $1::int order by start_local`, [maxHistoryDays]),
       query(`select date, start_local, type, name, distance_km, duration_s, avg_hr, max_hr, training_effect_label
              from activities where date > current_date - 10 order by start_local desc`),
       query(`select date, name, exercises from gym_sessions where date > current_date - 14 order by date desc`),
@@ -109,7 +110,7 @@ app.get("/api/dashboard", async (_req, res, next) => {
       query(`select date::text, flags, actions from readiness order by date desc limit 1`),
     ]);
     res.json({
-      alerts: await alerts(), weeks, days, health, weights, runs, recent, gym, note: note[0] ?? null, syncs,
+      config: DASHBOARD, alerts: await alerts(), weeks, days, health, weights, runs, recent, gym, note: note[0] ?? null, syncs,
       gymPlan, gymLastDone: Object.fromEntries(lastByDay.map((r) => [r.name, r.last])), block, runningBlock, planChanges, liftingPlan, status, checkins, readiness: readiness ?? null,
       blockProgress: await blockProgress(runningBlock),
       lifting: await liftingSummary(),

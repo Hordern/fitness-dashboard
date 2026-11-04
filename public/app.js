@@ -115,8 +115,9 @@ function metricCard({ title, icon, color, date, value, unit, viz, caption }) {
   </div>`;
 }
 
-function renderHealth({ health, weights }) {
-  const latest = (key) => [...health].reverse().find((h) => h[key] != null);
+function renderHealth({ health: all, weights, config }) {
+  const latest = (key) => [...all].reverse().find((h) => h[key] != null);
+  const health = all.filter((h) => h.date.slice(0, 10) > isoDaysAgo(config.card_trend_days)); // for the cards' trend lines
   const waiting = "Waiting for the first Garmin sync";
 
   const ready = latest("readiness_score");
@@ -148,7 +149,7 @@ function renderHealth({ health, weights }) {
     metricCard({
       title: "Resting HR", icon: "heart", color: "--heart", date: rhr?.date,
       value: rhr?.resting_hr, unit: "bpm", viz: sparkline(health.map((h) => h.resting_hr), "--heart"),
-      caption: rhrs.length ? `14-day average ${Math.round(avg(rhrs))} bpm` : waiting,
+      caption: rhrs.length ? `${config.card_trend_days}-day average ${Math.round(avg(rhrs))} bpm` : waiting,
     }),
     metricCard({
       title: "Training Load", icon: "load", color: "--load", date: load?.date,
@@ -654,78 +655,94 @@ function noData(id, datasets, message) {
   return true;
 }
 
-function line(id, labels, datasets, scales, empty = "No data yet") {
-  if (noData(id, datasets.filter((d) => !d.reference), empty)) return;
-  new Chart($(id), {
-    type: "line",
-    data: { labels, datasets: datasets.map((d) => ({ backgroundColor: "transparent", spanGaps: true, ...d })) },
-    options: { scales: scales ?? axes() },
-  });
+// Every chart has the period pills from the dashboard config (src/dashboard-config.js)
+// under it. `draw(since)` builds the chart for dates after `since` and returns it.
+function rangeChart(id, config, draw) {
+  const card = $(id).closest(".card");
+  card.insertAdjacentHTML("beforeend", `<div class="chart-range"><div class="segmented">${config.chart_ranges
+    .map((r) => `<button data-days="${r.days}"${r.days === config.default_range_days ? ' class="on"' : ""}>${esc(r.label)}</button>`).join("")}</div></div>`);
+  const buttons = [...card.querySelectorAll(".chart-range button")];
+  let chart;
+  const show = (days) => { chart?.destroy(); chart = draw(isoDaysAgo(days), days); };
+  for (const b of buttons) b.onclick = () => { buttons.forEach((x) => x.classList.toggle("on", x === b)); show(Number(b.dataset.days)); };
+  show(config.default_range_days);
 }
 
-function renderCharts({ weeks, days, health, weights, runs }) {
+const lineChart = (id, labels, datasets, scales, extra = {}) => new Chart($(id), {
+  type: "line",
+  data: { labels, datasets: datasets.map((d) => ({ backgroundColor: "transparent", spanGaps: true, ...d })) },
+  options: { scales: scales ?? axes(), ...extra },
+});
+// Rows on local dates after `since` (dates are "YYYY-MM-DD"; timestamps are converted to the local date).
+const localDate = (v) => (String(v).length > 10 ? new Date(v).toLocaleDateString("en-CA") : String(v));
+const after = (rows, since, key = "date") => rows.filter((r) => localDate(r[key]) > since);
+const hours = (s) => (s == null ? null : +(s / 3600).toFixed(2));
+const kg = (n) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)} kg`;
+
+function renderCharts({ weeks, days, health, weights, runs, config }) {
   chartDefaults();
-  const hLabels = health.map((h) => fmtShort(h.date));
-  line("hrvChart", hLabels, [
-    { label: "Resting HR", data: health.map((h) => h.resting_hr), borderColor: css("--heart") },
-    { label: "HRV (ms)", data: health.map((h) => h.hrv_last_night), borderColor: css("--hrv"), yAxisID: "y1" },
-  ], axes({ y1: {} }), "Waiting for the first Garmin sync");
-  line("readinessChart", hLabels, [
-    { label: "Readiness", data: health.map((h) => h.readiness_score), borderColor: css("--ready") },
-    { label: "Acute load", data: health.map((h) => h.acute_load), borderColor: css("--load"), borderDash: [4, 4], yAxisID: "y1" },
-  ], axes({ y: { min: 0, max: 100 }, y1: {} }), "Waiting for the first Garmin sync");
-  renderWeightChart(weights);
-  line("hrTrendChart", runs.map((r) => fmtShort(r.date)), [
-    { label: "Avg HR", data: runs.map((r) => r.avg_hr), borderColor: css("--heart"), pointRadius: 3 },
-    { label: "Easy guide", data: runs.map(() => HR_GUIDE), borderColor: css("--ok"), borderDash: [3, 4], borderWidth: 1.5, reference: true },
-  ], undefined, "Runs appear here once Garmin is connected");
-
-  const recentWeeks = weeks.slice(-10);
-  const actual = recentWeeks.map((w) => days.filter((d) => d.week_start === w.start_date).reduce((s, d) => s + (d.actual_km ?? 0), 0));
-  new Chart($("volumeChart"), {
-    type: "bar",
-    data: {
-      labels: recentWeeks.map((w) => w.label.replace("Week ", "W")),
-      datasets: [
-        { label: "Planned", data: recentWeeks.map((w) => w.planned_total_km), backgroundColor: css("--track"), borderRadius: 6 },
-        { label: "Actual", data: actual, backgroundColor: css("--run"), borderRadius: 6 },
-      ],
-    },
-    options: { scales: axes({ y: { beginAtZero: true } }) },
-  });
-
-  const nights = health.slice(-7);
-  const hours = (s) => (s == null ? null : +(s / 3600).toFixed(2));
-  const sleepSets = [["Deep", "deep_s", "--sleep"], ["Light", "light_s", "--hrv"], ["REM", "rem_s", "--ready"], ["Awake", "awake_s", "--weight"]]
-    .map(([l, k, c]) => ({ label: l, data: nights.map((h) => hours(h[k])), backgroundColor: css(c), borderRadius: 4 }));
-  if (noData("sleepChart", sleepSets, "Waiting for the first Garmin sync")) return;
-  new Chart($("sleepChart"), {
-    type: "bar",
-    data: { labels: nights.map((h) => fmtShort(h.date)), datasets: sleepSets },
-    options: { scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, border: { display: false }, title: { display: true, text: "hours" } } } },
-  });
-}
-
-// Weight chart with Week / Month / 3 months pills under it (Month by default).
-let weightChart;
-function renderWeightChart(weights) {
-  if (noData("weightChart", [{ data: weights.map((w) => w.weight_kg) }], "Waiting for the first Withings weigh-in")) return;
-  const draw = (days) => {
-    const shown = weights.filter((w) => new Date(w.measured_at) >= Date.now() - days * 86_400_000);
-    const change = shown.length > 1 ? shown.at(-1).weight_kg - shown[0].weight_kg : null;
-    $("weightWhen").textContent = change == null ? "" : `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(1)} kg`;
-    weightChart?.destroy();
-    weightChart = new Chart($("weightChart"), {
-      type: "line",
-      data: { labels: shown.map((w) => fmtShort(w.measured_at)), datasets: [{ label: "Weight (kg)", data: shown.map((w) => w.weight_kg), borderColor: css("--weight"), backgroundColor: "transparent", borderWidth: 1.8, pointRadius: days <= 7 ? 3 : 0 }] },
-      options: { scales: axes(), plugins: { legend: { display: false } } },
-    });
+  const garmin = "Waiting for the first Garmin sync";
+  const healthChart = (id, sets, scales) => {
+    if (noData(id, sets(health), garmin)) return;
+    rangeChart(id, config, (since) => { const h = after(health, since); return lineChart(id, h.map((x) => fmtShort(x.date)), sets(h), scales); });
   };
-  const buttons = [...document.querySelectorAll("#weightRange button")];
-  for (const b of buttons) {
-    b.onclick = () => { buttons.forEach((x) => x.classList.toggle("on", x === b)); draw(Number(b.dataset.days)); };
+  healthChart("hrvChart", (h) => [
+    { label: "Resting HR", data: h.map((x) => x.resting_hr), borderColor: css("--heart") },
+    { label: "HRV (ms)", data: h.map((x) => x.hrv_last_night), borderColor: css("--hrv"), yAxisID: "y1" },
+  ], axes({ y1: {} }));
+  healthChart("readinessChart", (h) => [
+    { label: "Readiness", data: h.map((x) => x.readiness_score), borderColor: css("--ready") },
+    { label: "Acute load", data: h.map((x) => x.acute_load), borderColor: css("--load"), borderDash: [4, 4], yAxisID: "y1" },
+  ], axes({ y: { min: 0, max: 100 }, y1: {} }));
+
+  if (!noData("weightChart", [{ data: weights.map((w) => w.weight_kg) }], "Waiting for the first Withings weigh-in")) {
+    rangeChart("weightChart", config, (since, days) => {
+      const shown = after(weights, since, "measured_at");
+      $("weightWhen").textContent = shown.length > 1 ? kg(shown.at(-1).weight_kg - shown[0].weight_kg) : "";
+      return lineChart("weightChart", shown.map((w) => fmtShort(w.measured_at)),
+        [{ label: "Weight (kg)", data: shown.map((w) => w.weight_kg), borderColor: css("--weight"), borderWidth: 1.8, pointRadius: days <= 7 ? 3 : 0 }],
+        axes(), { plugins: { legend: { display: false } } });
+    });
   }
-  draw(31);
+
+  if (!noData("hrTrendChart", [{ data: runs.map((r) => r.avg_hr) }], "Runs appear here once Garmin is connected")) {
+    rangeChart("hrTrendChart", config, (since) => {
+      const r = after(runs, since);
+      return lineChart("hrTrendChart", r.map((x) => fmtShort(x.date)), [
+        { label: "Avg HR", data: r.map((x) => x.avg_hr), borderColor: css("--heart"), pointRadius: 3 },
+        { label: "Easy guide", data: r.map(() => HR_GUIDE), borderColor: css("--ok"), borderDash: [3, 4], borderWidth: 1.5 },
+      ]);
+    });
+  }
+
+  // Plan weeks that overlap the period, up to the current week.
+  rangeChart("volumeChart", config, (since) => {
+    const shown = weeks.filter((w) => String(w.end_date).slice(0, 10) > since && String(w.start_date).slice(0, 10) <= todayIso());
+    const actual = shown.map((w) => days.filter((d) => d.week_start === w.start_date).reduce((s, d) => s + (d.actual_km ?? 0), 0));
+    return new Chart($("volumeChart"), {
+      type: "bar",
+      data: {
+        labels: shown.map((w) => w.label.replace("Week ", "W")),
+        datasets: [
+          { label: "Planned", data: shown.map((w) => w.planned_total_km), backgroundColor: css("--track"), borderRadius: 6 },
+          { label: "Actual", data: actual, backgroundColor: css("--run"), borderRadius: 6 },
+        ],
+      },
+      options: { scales: axes({ y: { beginAtZero: true } }) },
+    });
+  });
+
+  const sleepSets = (nights) => [["Deep", "deep_s", "--sleep"], ["Light", "light_s", "--hrv"], ["REM", "rem_s", "--ready"], ["Awake", "awake_s", "--weight"]]
+    .map(([l, k, c]) => ({ label: l, data: nights.map((h) => hours(h[k])), backgroundColor: css(c), borderRadius: 4 }));
+  if (noData("sleepChart", sleepSets(health), garmin)) return;
+  rangeChart("sleepChart", config, (since) => {
+    const nights = after(health, since);
+    return new Chart($("sleepChart"), {
+      type: "bar",
+      data: { labels: nights.map((h) => fmtShort(h.date)), datasets: sleepSets(nights) },
+      options: { scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, border: { display: false }, title: { display: true, text: "hours" } } } },
+    });
+  });
 }
 
 // ---------- Status, alerts, navigation ----------
