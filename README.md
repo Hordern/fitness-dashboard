@@ -1,5 +1,7 @@
 # Fitness Dashboard
 
+**Live: [fitness.horderns.com](https://fitness.horderns.com)**
+
 A personal health and training dashboard. It pulls data from a Garmin watch,
 Withings scales and JEFIT (gym logging) into Postgres, runs a deterministic
 coaching rules engine over it, and uses Claude to explain the engine's
