@@ -3,6 +3,7 @@
 
 import { query, recordSync } from "./db.js";
 import { syncGarmin } from "./sources/garmin.js";
+import { assignRuns } from "./plan/assign-runs.js";
 import { syncWithings } from "./sources/withings.js";
 import { syncJefit } from "./sources/jefit.js";
 
@@ -14,7 +15,11 @@ let running = null; // one sync at a time per process
 export async function syncData() {
   if (running) return running;
   running = (async () => {
-    await recordSync("garmin", () => syncGarmin());
+    await recordSync("garmin", async () => {
+      const synced = await syncGarmin();
+      const assigned = await assignRuns(); // which planned run each new run counts for
+      return assigned ? `${synced}; ${assigned}` : synced;
+    });
     await recordSync("withings", () => syncWithings());
     await recordSync("jefit", () => syncJefit());
   })().finally(() => (running = null));

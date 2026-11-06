@@ -84,15 +84,20 @@ app.get("/api/dashboard", async (_req, res, next) => {
   try {
     const [weeks, days, health, weights, runs, recent, gym, note, syncs, gymPlan, lastByDay, block, runningBlock, planChanges, liftingPlan, status, checkins, [readiness]] = await Promise.all([
       query(`select * from plan_weeks order by start_date`),
-      query(`select p.*, w.block,
-                    (select sum(distance_km) from activities a where a.date = p.date and a.type = 'running') as actual_km,
-                    (select round(avg(avg_hr)) from activities a where a.date = p.date and a.type = 'running') as actual_hr,
-                    (select round(sum(duration_s) / 60) from activities a where a.date = p.date and a.type = 'running') as actual_min
-             from plan_days p join plan_weeks w on w.start_date = p.week_start order by date`),
+      // Each day's run: the run that counts for it (maybe done later, actual_date),
+      // or an extra unplanned run done that day.
+      query(`select p.*, w.block, r.*
+             from plan_days p join plan_weeks w on w.start_date = p.week_start
+             left join lateral (
+               select sum(distance_km) as actual_km, round(avg(avg_hr)) as actual_hr,
+                      round(sum(duration_s) / 60) as actual_min, max(date)::text as actual_date
+               from activities a where a.plan_date = p.date or (a.is_run and a.plan_date is null and a.date = p.date)
+             ) r on true
+             order by date`),
       query(`select * from health_daily where date > current_date - $1::int order by date`, [maxHistoryDays]),
       // Full history (about a reading a day, so ~1,000 rows); the page picks the range to show.
       query(`select measured_at, weight_kg, fat_ratio, muscle_kg from weights order by measured_at`),
-      query(`select date, distance_km, avg_hr from activities where type = 'running' and date > current_date - $1::int order by start_local`, [maxHistoryDays]),
+      query(`select date, distance_km, avg_hr from activities where is_run and date > current_date - $1::int order by start_local`, [maxHistoryDays]),
       query(`select date, start_local, type, name, distance_km, duration_s, avg_hr, max_hr, training_effect_label
              from activities where date > current_date - 10 order by start_local desc`),
       query(`select date, name, exercises from gym_sessions where date > current_date - 14 order by date desc`),
@@ -234,7 +239,7 @@ async function blockProgress(block) {
   const weeks = await query(
     `select w.label, w.kind, w.start_date::text as start, w.end_date::text as "end",
             coalesce(sum(d.planned_min) filter (where coalesce(d.session, '') <> 'cross'), 0)::int as planned_min,
-            coalesce((select round(sum(a.duration_s) / 60) from activities a where a.type = 'running' and a.date between w.start_date and w.end_date), 0)::int as done_min
+            coalesce((select round(sum(a.duration_s) / 60) from activities a where a.is_run and a.date between w.start_date and w.end_date), 0)::int as done_min
      from plan_weeks w join plan_days d on d.week_start = w.start_date where w.block = $1 group by w.start_date order by w.start_date`,
     [block.name]);
   const [{ n }] = await query(`select count(*)::int as n from training_blocks where block_type = $1 and start_date <= $2`, [block.block_type, block.start]);

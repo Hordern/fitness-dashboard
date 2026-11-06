@@ -14,7 +14,7 @@ export async function blockStatus(block, today) {
     `select w.label, w.start_date::text as start, w.end_date::text as end,
             count(*) filter (where d.planned_km > 0) as planned,
             count(*) filter (where d.planned_km > 0 and exists (
-              select 1 from activities a where a.date = d.date and a.type = 'running')) as done
+              select 1 from activities a where a.plan_date = d.date)) as done
      from plan_weeks w join plan_days d on d.week_start = w.start_date
      where w.block = $1 group by w.start_date order by w.start_date`,
     [block.name],

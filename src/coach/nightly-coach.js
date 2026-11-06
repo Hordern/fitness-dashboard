@@ -46,7 +46,7 @@ async function context(day) {
     plan_this_week_and_next: await query(`select date::text, gym, run_type, planned_km, hr_guide, shoe, status, notes from plan_days where date between current_date - 7 and current_date + 14 order by date`),
     // Run days nobody has reviewed yet: past days, plus today once a run is logged.
     // Days someone already commented on are left alone.
-    reviewable_days: await query(`select date::text, run_type, planned_km from plan_days where (date < $1 or (date = $1 and exists (select 1 from activities a where a.date = plan_days.date and a.type = 'running'))) and date >= current_date - 7 and planned_km > 0 and status = 'upcoming' order by date`, [day]),
+    reviewable_days: await query(`select date::text, run_type, planned_km, (select a.date::text from activities a where a.plan_date = plan_days.date order by a.start_local limit 1) as run_done_on from plan_days where (date < $1 or (date = $1 and exists (select 1 from activities a where a.plan_date = plan_days.date))) and date >= current_date - 7 and planned_km > 0 and status = 'upcoming' order by date`, [day]),
     recent_plan_changes: await recentChanges(10),
     activities: await query(`select start_local::text, type, name, distance_km, duration_s, avg_hr, max_hr, elevation_gain_m, training_effect_label
                              from activities where date >= ${since} order by start_local`),
@@ -102,6 +102,7 @@ export async function runNightlyCoach() {
       role: "user",
       content:
         `Today is ${day}. 1) Review each day in reviewable_days using its run in runs_in_detail (everything Garmin recorded, as if you had every screen of the run), ` +
+        `which is the run done on run_done_on: a late run (done after its planned day, in the same week) counts for the planned run it made up; treadmill runs count like any run. ` +
         `compared with the other runs there and the day's recovery and gym data. Comment on each session in lifting_sessions_to_review from its plan_check and full detail ` +
         `(the lifting plan is double progression; the rules engine already raised any loads). Be specific and quantitative, like a good coach looking at the data with him. ` +
         `2) Write today's note: what happened since the last note, how recovery looks (readiness flags), and the next planned session. ` +

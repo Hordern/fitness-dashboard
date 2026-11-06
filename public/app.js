@@ -306,7 +306,8 @@ function renderPlan({ weeks, days, runningBlock }) {
           ${comment}
         </div>
         <div class="row-side">${d.actual_min != null ? `${d.actual_min} min` : ""}
-          <div class="muted">${d.actual_km != null ? `${d.actual_km} km` : ""}${d.actual_hr ? ` · <span class="${d.actual_hr > HR_GUIDE ? "hot" : ""}">${d.actual_hr} bpm</span>` : ""}</div></div>
+          <div class="muted">${d.actual_km != null ? `${d.actual_km} km` : ""}${d.actual_hr ? ` · <span class="${d.actual_hr > HR_GUIDE ? "hot" : ""}">${d.actual_hr} bpm</span>` : ""}</div>
+          ${d.actual_date && d.actual_date !== d.date ? `<div class="muted">done ${asDate(d.actual_date).toLocaleDateString(undefined, { weekday: "short" })}</div>` : ""}</div>
       </div>`;
     }).join("");
   };
@@ -472,7 +473,7 @@ function renderActivities(recent) {
         <div class="row-detail">${esc(a.type.replace(/_/g, " "))}${a.training_effect_label ? ` · ${esc(a.training_effect_label.replace(/_/g, " ").toLowerCase())}` : ""}</div>
       </div>
       <div class="row-side">${a.distance_km ? `${a.distance_km} km` : hm(a.duration_s)}
-        <div class="muted">${a.avg_hr ? `<span class="${a.type === "running" && a.avg_hr > HR_GUIDE ? "hot" : ""}">${a.avg_hr} bpm</span>` : ""}</div></div>
+        <div class="muted">${a.avg_hr ? `<span class="${/running/.test(a.type) && a.avg_hr > HR_GUIDE ? "hot" : ""}">${a.avg_hr} bpm</span>` : ""}</div></div>
     </div>`;
   const rest = recent.slice(ACTIVITY_PREVIEW);
   $("activityList").innerHTML = recent.slice(0, ACTIVITY_PREVIEW).map(row).join("")

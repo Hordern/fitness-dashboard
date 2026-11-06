@@ -16,7 +16,7 @@ const addDays = (iso, n) => new Date(Date.parse(iso) + n * 86_400_000).toISOStri
 export async function sessionCompletion(block, today) {
   const rows = await query(
     `select d.date::text, d.planned_min, d.planned_km,
-            (select sum(duration_s) / 60 from activities a where a.date = d.date and a.type = 'running') as run_min
+            (select sum(duration_s) / 60 from activities a where a.plan_date = d.date) as run_min
      from plan_days d where d.date >= $1 and d.date < $2 and (d.planned_min > 0 or d.planned_km > 0) and coalesce(d.session, '') <> 'cross'
      order by d.date`,
     [block.start, today],

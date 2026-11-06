@@ -97,9 +97,16 @@ export function series(details, everySeconds = 60) {
   return out;
 }
 
+// Treadmill or outdoor, and the planned run it counts for when that's another day (a late run).
+const runPlan = (a) => ({
+  ...(a.type && a.type !== "running" && { kind: a.type.replace(/_/g, " ") }),
+  ...(a.plan_date && a.plan_date !== a.date && { counts_for_planned_run_on: a.plan_date }),
+  ...(a.type && a.plan_date === null && { counts_for_planned_run_on: "none (extra run)" }),
+});
+
 export function analyseRun(activity) {
   const d = activity.details;
-  if (!d) return { date: activity.date, detail: "summary only (full details not fetched)", distance_km: activity.distance_km, minutes: r1(activity.duration_s / 60), avg_hr: activity.avg_hr, max_hr: activity.max_hr, elevation_gain_m: activity.elevation_gain_m, training_effect: activity.training_effect_label };
+  if (!d) return { date: activity.date, ...runPlan(activity), detail: "summary only (full details not fetched)", distance_km: activity.distance_km, minutes: r1(activity.duration_s / 60), avg_hr: activity.avg_hr, max_hr: activity.max_hr, elevation_gain_m: activity.elevation_gain_m, training_effect: activity.training_effect_label };
   const s = d.activity?.summaryDTO ?? {};
   const ss = samples(d.metrics);
   const hrSamples = ss.filter((x) => x.hr);
@@ -109,6 +116,7 @@ export function analyseRun(activity) {
 
   return {
     date: activity.date,
+    ...runPlan(activity),
     start: s.startTimeLocal?.slice(11, 16),
     name: d.activity?.activityName,
     distance_km: r2(s.distance / 1000),
@@ -149,12 +157,12 @@ export function analyseRun(activity) {
 // Runs in a date range, analysed (oldest first).
 export async function runsBetween(from, to) {
   const rows = await query(
-    `select id, date::text, distance_km, duration_s, avg_hr, max_hr, elevation_gain_m, training_effect_label, details
-     from activities where type like '%running%' and date between $1 and $2 order by start_local`, [from, to]);
+    `select id, date::text, plan_date::text, type, distance_km, duration_s, avg_hr, max_hr, elevation_gain_m, training_effect_label, details
+     from activities where is_run and date between $1 and $2 order by start_local`, [from, to]);
   return rows.map(analyseRun);
 }
 
 export async function runOn(date) {
-  const [row] = await query(`select id, date::text, distance_km, duration_s, avg_hr, max_hr, elevation_gain_m, training_effect_label, details from activities where type like '%running%' and date = $1 order by start_local desc limit 1`, [date]);
+  const [row] = await query(`select id, date::text, distance_km, duration_s, avg_hr, max_hr, elevation_gain_m, training_effect_label, details from activities where is_run and date = $1 order by start_local desc limit 1`, [date]);
   return row ?? null;
 }

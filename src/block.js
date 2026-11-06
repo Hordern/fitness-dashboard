@@ -17,7 +17,7 @@ export async function blockSummary(start, end) {
     query(
       `select count(*) filter (where planned_km > 0) as runs_planned,
               count(*) filter (where planned_km > 0 and exists (
-                select 1 from activities a where a.date = p.date and a.type = 'running')) as runs_done,
+                select 1 from activities a where a.plan_date = p.date)) as runs_done,
               coalesce(sum(planned_km), 0) as km_planned
        from plan_days p where date between $1 and $2`,
       [start, end],
@@ -25,7 +25,7 @@ export async function blockSummary(start, end) {
     query(
       `select count(*) as runs, coalesce(sum(distance_km), 0) as km,
               avg(avg_hr) as avg_hr, count(*) filter (where avg_hr < $3) as under_guide
-       from activities where type = 'running' and date between $1 and $2`,
+       from activities where is_run and date between $1 and $2`,
       [start, end, HR_GUIDE],
     ),
     query(`select count(*) as sessions from gym_sessions where date between $1 and $2`, [start, end]),

@@ -84,7 +84,7 @@ function buildServer({ canWrite }) {
     inputSchema: range,
   }, async ({ from, to }) => rows(
     `select p.date::text, w.label as week, p.gym, p.run_type, p.planned_km, p.hr_guide, p.shoe, p.status, p.notes,
-            (select sum(distance_km) from activities a where a.date = p.date and a.type = 'running') as actual_km
+            (select sum(distance_km) from activities a where a.plan_date = p.date) as actual_km
      from plan_days p join plan_weeks w on w.start_date = p.week_start
      where p.date between $1 and $2 order by p.date`, [from, to]));
 

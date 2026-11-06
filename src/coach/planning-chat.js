@@ -51,9 +51,9 @@ async function planningContext() {
     plan_weeks: await query(
       `select w.block, w.label, w.start_date::text as start, w.planned_total_km,
               count(*) filter (where d.planned_km > 0) as runs_planned,
-              count(*) filter (where d.planned_km > 0 and exists (select 1 from activities a where a.date = d.date and a.type = 'running')) as runs_done
+              count(*) filter (where d.planned_km > 0 and exists (select 1 from activities a where a.plan_date = d.date)) as runs_done
        from plan_weeks w join plan_days d on d.week_start = w.start_date group by w.start_date order by w.start_date`),
-    runs: await query(`select date::text, distance_km, round(duration_s / 60) as minutes, avg_hr, max_hr, training_effect_label from activities where type = 'running' and date >= current_date - 120 order by date`),
+    runs: await query(`select date::text, distance_km, round(duration_s / 60) as minutes, avg_hr, max_hr, training_effect_label from activities where is_run and date >= current_date - 120 order by date`),
     recovery_by_week: await query(
       `select date_trunc('week', date)::date::text as week, round(avg(resting_hr), 1) as resting_hr, round(avg(hrv_last_night), 1) as hrv,
               round(avg(readiness_score)) as readiness, round(avg(sleep_score)) as sleep_score

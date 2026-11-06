@@ -194,3 +194,13 @@ alter table gym_sessions add column if not exists coach_comment text;
 -- The session compared with the lifting plan as it stood when reviewed (frozen
 -- so later plan changes don't rewrite history). See src/lifting/analysis.js.
 alter table gym_sessions add column if not exists plan_check jsonb;
+
+-- Any kind of run counts (outdoor, treadmill, trail, track): Garmin's type for
+-- all of them ends in "running".
+alter table activities add column if not exists is_run boolean generated always as (type like '%running%') stored;
+
+-- The planned run this run counts for (src/plan/assign-runs.js): usually its
+-- own day; a late run makes up the most recent missed run of its plan week.
+-- Null = an extra, unplanned run. plan_assigned_at is set once it's decided.
+alter table activities add column if not exists plan_date date;
+alter table activities add column if not exists plan_assigned_at timestamptz;

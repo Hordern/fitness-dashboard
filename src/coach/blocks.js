@@ -18,7 +18,7 @@ const EASY_GUIDE = `Aim <${CONFIG.thresholds.easy_hr_ceiling} bpm`;
 export async function easyPace() {
   const [{ pace }] = await query(
     `select percentile_cont(0.5) within group (order by duration_s / 60 / distance_km) as pace
-     from activities where type = 'running' and distance_km > 0 and avg_hr <= $1 and date >= current_date - 90`,
+     from activities where is_run and distance_km > 0 and avg_hr <= $1 and date >= current_date - 90`,
     [CONFIG.thresholds.easy_hr_ceiling],
   );
   return pace ? Number(pace) : 7;

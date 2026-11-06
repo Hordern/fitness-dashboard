@@ -17,7 +17,7 @@ const TYPE_LABEL = { FITNESS_BASE: "Base", FITNESS_ENDURANCE: "Endurance", FITNE
 async function efficiency(start, end) {
   const [r] = await query(
     `select avg((distance_km * 1000 / (duration_s / 60)) / avg_hr) as ef, count(*) as n
-     from activities where type = 'running' and date between $1 and $2 and distance_km > 0 and avg_hr > 0 and avg_hr <= $3`,
+     from activities where is_run and date between $1 and $2 and distance_km > 0 and avg_hr > 0 and avg_hr <= $3`,
     [start, end, T.easy_hr_ceiling],
   );
   return { ef: r.ef == null ? null : Number(r.ef), runs: Number(r.n) };
@@ -28,7 +28,7 @@ async function benchmark(blockName) {
   const [r] = await query(
     `select d.date::text, a.distance_km, a.duration_s, a.avg_hr
      from plan_days d join plan_weeks w on w.start_date = d.week_start
-     join activities a on a.date = d.date and a.type = 'running'
+     join activities a on a.plan_date = d.date
      where w.block = $1 and d.session = 'benchmark' order by a.duration_s desc limit 1`,
     [blockName],
   );
@@ -42,7 +42,7 @@ async function blockWeeks(blockName) {
             coalesce(sum(d.planned_min) filter (where coalesce(d.session, '') <> 'cross'), 0) as planned_min,
             max(d.planned_min) filter (where d.session = 'long') as long_min,
             count(*) filter (where d.planned_min > 0) as runs_planned,
-            count(*) filter (where d.planned_min > 0 and exists (select 1 from activities a where a.date = d.date and a.type = 'running')) as runs_done
+            count(*) filter (where d.planned_min > 0 and exists (select 1 from activities a where a.plan_date = d.date)) as runs_done
      from plan_weeks w join plan_days d on d.week_start = w.start_date where w.block = $1 group by w.start_date order by w.start_date`,
     [blockName],
   );
@@ -55,15 +55,15 @@ async function gateOpen(end) {
     `select w.start_date::text as start,
             count(*) filter (where coalesce(d.planned_min, 0) > 0 or coalesce(d.planned_km, 0) > 0) as planned,
             count(*) filter (where (coalesce(d.planned_min, 0) > 0 or coalesce(d.planned_km, 0) > 0)
-              and exists (select 1 from activities a where a.date = d.date and a.type = 'running')) as done
+              and exists (select 1 from activities a where a.plan_date = d.date)) as done
      from plan_weeks w join plan_days d on d.week_start = w.start_date where w.end_date <= $1 group by w.start_date order by w.start_date desc limit $2`,
     [end, CONFIG.gate.consecutive_weeks],
   );
   const streak = weeks.length === CONFIG.gate.consecutive_weeks && weeks.every((w) => Number(w.planned) && Number(w.done) / Number(w.planned) >= CONFIG.gate.completion_min);
   const [pain] = await query(`select count(*) as n from checkins where date > $1::date - 84 and greatest(pain_during, pain_next_morning) >= $2`, [end, T.pain_flag_min]);
   const [vol] = await query(
-    `select max(duration_s) / 60 as longest, (select max(m) from (select sum(duration_s) / 60 as m from activities where type = 'running' and date > $1::date - 28 group by date_trunc('week', date)) x) as week_max
-     from activities where type = 'running' and date > $1::date - 28`, [end]);
+    `select max(duration_s) / 60 as longest, (select max(m) from (select sum(duration_s) / 60 as m from activities where is_run and date > $1::date - 28 group by date_trunc('week', date)) x) as week_max
+     from activities where is_run and date > $1::date - 28`, [end]);
   const volumeOk = Number(vol.longest ?? 0) >= CONFIG.gate.long_run_minutes || Number(vol.week_max ?? 0) >= CONFIG.gate.base_target_minutes;
   return { open: streak && Number(pain.n) === 0 && volumeOk, completion_streak: streak, pain_free: Number(pain.n) === 0, volume_ok: volumeOk };
 }
