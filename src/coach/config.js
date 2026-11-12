@@ -58,6 +58,20 @@ export const CONFIG = {
     long_run_day: "Sat",
     heavy_leg_days: ["Mon", "Thu"],
   },
+
+  // Adjustments the planning chat can make to a generated block, all more
+  // cautious than (or equal to) the spec's defaults. See blocks.js generateBlock.
+  block_options: {
+    // The deload-week benchmark. Only tests of the same kind are compared
+    // between blocks (spec section 4: keep one test fixed).
+    benchmarks: {
+      time_trial: { run_type: "30-min time trial (benchmark)", hr_guide: "Steady hard effort, even pacing", notes: "10 min easy warm-up first. Same test every deload week so blocks can be compared." },
+      easy_hr: { run_type: "30-min easy benchmark (HR ~140)", hr_guide: "Hold HR steady around 140", notes: "Same route or the treadmill each time, and record the distance. More distance at the same HR is aerobic progress, without a hard effort." },
+    },
+    default_benchmark: "time_trial",
+    // Added to every run's notes when a block has the pre-run check on.
+    pre_run_check_note: "Knee check first: a slow deep squat and the stairs. If either hurts, swap the run for an easy bike ride.",
+  },
 };
 
 export const BLOCK_TYPES = ["RETURN_TO_RUN", "FITNESS_BASE", "FITNESS_THRESHOLD", "FITNESS_ENDURANCE", "FITNESS_SPEED"];

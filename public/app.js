@@ -974,7 +974,7 @@ function renderProposal(p) {
   const used = days.filter((d) => g.weeks.some((w) => w.days.some((x) => x.planned_min && wd(x.date) === d)));
   const cell = (w, d) => {
     const x = w.days.find((y) => y.planned_min && wd(y.date) === d);
-    return x ? `${x.planned_min}′${x.session === "benchmark" ? " TT" : x.session === "strides" ? " +s" : x.session === "long" ? " L" : x.session === "quality" ? " Q" : ""}` : "";
+    return x ? `${x.planned_min}′${x.session === "benchmark" ? " B" : x.session === "strides" ? " +s" : x.session === "long" ? " L" : x.session === "quality" ? " Q" : ""}` : "";
   };
   $("proposal").innerHTML = `
     <div class="proposal">
@@ -984,7 +984,7 @@ function renderProposal(p) {
         <tr><th>Week</th>${used.map((d) => `<th>${d}</th>`).join("")}<th>Total</th></tr>
         ${g.weeks.map((w) => `<tr><td>${esc(w.label)}${w.kind === "deload" ? " (deload)" : ""}</td>${used.map((d) => `<td>${cell(w, d)}</td>`).join("")}<td><b>${w.total_min}′</b></td></tr>`).join("")}
       </table></div>
-      <div class="caption">L long run · +s strides · TT 30-min benchmark · Q quality. Minutes; ≈km at ${g.pace_min_per_km} min/km.</div>
+      <div class="caption">L long run · +s strides · B ${esc(g.weeks.flatMap((w) => w.days).find((x) => x.session === "benchmark")?.run_type ?? "benchmark")} · Q quality. Minutes; ≈km at ${g.pace_min_per_km} min/km.${g.options?.pre_run_check ? " Knee check before every run." : ""}</div>
       <details><summary>Rules (${p.rules.length}) · success measure</summary><ul>${p.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><p><strong>Success:</strong> ${esc(p.success)}</p></details>
       <button class="btn" id="lockIn">Lock in this block</button>
     </div>`;

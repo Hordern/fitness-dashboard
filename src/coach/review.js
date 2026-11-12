@@ -24,15 +24,18 @@ async function efficiency(start, end) {
 }
 
 // The block's 30-min benchmark: the run on the planned benchmark day.
+// `kind` is its key in block_options.benchmarks (time trial or easy HR); only
+// tests of the same kind are compared.
 async function benchmark(blockName) {
   const [r] = await query(
-    `select d.date::text, a.distance_km, a.duration_s, a.avg_hr
+    `select d.date::text, d.run_type, a.distance_km, a.duration_s, a.avg_hr
      from plan_days d join plan_weeks w on w.start_date = d.week_start
      join activities a on a.plan_date = d.date
      where w.block = $1 and d.session = 'benchmark' order by a.duration_s desc limit 1`,
     [blockName],
   );
-  return r ? { date: r.date, distance_km: Number(r.distance_km), minutes: round(Number(r.duration_s) / 60), avg_hr: r.avg_hr } : null;
+  const kind = Object.entries(CONFIG.block_options.benchmarks).find(([, b]) => b.run_type === r?.run_type)?.[0] ?? CONFIG.block_options.default_benchmark;
+  return r ? { date: r.date, kind, distance_km: Number(r.distance_km), minutes: round(Number(r.duration_s) / 60), avg_hr: r.avg_hr } : null;
 }
 
 // Week-level facts for the block: planned/done minutes and peak build week.
@@ -157,7 +160,9 @@ export async function reviewBlock(block) {
 
   const bench = await benchmark(block.name);
   const [prev] = await query(`select review from training_blocks where end_date < $1 and review is not null order by end_date desc limit 1`, [block.start]);
-  const prevBench = prev?.review?.signals?.benchmark_run ?? null;
+  // The previous block's test, if it was the same kind (older reviews predate kinds: time trials).
+  const last = prev?.review?.signals?.benchmark_run ?? null;
+  const prevBench = last && bench && (last.kind ?? CONFIG.block_options.default_benchmark) === bench.kind ? last : null;
 
   const { scores, progress } = scoreProgress(efficiencyChange, bench, prevBench);
   const recoveryResult = await scoreRecovery(weeks);

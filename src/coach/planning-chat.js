@@ -13,7 +13,9 @@ import { blockStatus } from "../plan/status.js";
 import { blockSummary } from "../block.js";
 import { blockRules, generateBlock } from "./blocks.js";
 import { reviewBlock, TYPE_LABEL } from "./review.js";
-import { BLOCK_TYPES } from "./config.js";
+import { BLOCK_TYPES, CONFIG } from "./config.js";
+
+const BLOCK_OPTIONS = CONFIG.block_options;
 
 const MODEL = process.env.CLAUDE_MODEL ?? "claude-opus-5-5";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -25,11 +27,15 @@ const PREPARE_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      block_type: { type: "string", enum: BLOCK_TYPES.filter((t) => t !== "RETURN_TO_RUN") },
+      block_type: { type: "string", enum: BLOCK_TYPES.filter((t) => t !== "RETURN_TO_RUN") }, // the walk–run ladder isn't generated yet
       name: { type: "string", description: "Unique, e.g. 'Base block 2'" },
       summary: { type: "string", description: "Two or three sentences: what this block is for and why, from the review" },
       runs_per_week: { type: "integer", minimum: 3, maximum: 5, description: "Only if Daniel asks to change it" },
       first_week_min: { type: "number", description: "Only to lower the engine's starting volume at Daniel's request" },
+      run_days: { type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }, description: "Weekdays to run on, if Daniel wants different days (3–5; sets runs per week). The long run goes on Sat if listed, otherwise the last day." },
+      strides_from_week: { type: "integer", minimum: 1, description: "First week with strides; earlier weeks are easy runs only. Use for a niggle or a cautious start." },
+      benchmark: { type: "string", enum: Object.keys(BLOCK_OPTIONS.benchmarks), description: "Deload-week test. time_trial = 30-min time trial (the default, compared block to block); easy_hr = 30 min steady at HR ~140, recording distance, for when a hard effort isn't wise. Only tests of the same kind are compared." },
+      pre_run_check: { type: "boolean", description: "Add a knee check (slow deep squat and stairs; bike instead if either hurts) to every run's notes." },
     },
     required: ["block_type", "name", "summary"],
   },
@@ -89,7 +95,11 @@ async function systemPrompt() {
       "recommended block type and up to two alternatives). If review.provisional is true the block isn't over yet; say so. " +
       "Open by explaining the review in plain words, then call prepare_block with the recommended type. Keep messages short " +
       "and conversational. If Daniel prefers an alternative or fewer runs, call prepare_block again; the engine applies the " +
-      "guardrails and tells you if it changed his choice, and you pass that on. Daniel locks the card in himself; don't claim it is saved." },
+      "guardrails and tells you if it changed his choice, and you pass that on. Daniel locks the card in himself; don't claim it is saved. " +
+      "prepare_block can also make the block more cautious, never harder: different run days, strides only from a later week, an easy-HR " +
+      "benchmark instead of the time trial, and a knee check before every run. Use them when Daniel asks, and suggest them when recent " +
+      "check-ins or his messages mention pain or a niggle. If the review recommends Return to run: the walk–run ladder (spec section 7) " +
+      "isn't built in the engine yet, so say so and offer a Base block with those cautious options instead." },
   ];
 }
 
@@ -122,13 +132,15 @@ async function prepare(input, chat) {
     type, start, firstWeekMin, labelPrefix: "B",
     runsPerWeek: input.runs_per_week ?? review.next_block.runs_per_week,
     prevLongMin: long == null ? null : Number(long),
+    runDays: input.run_days, stridesFromWeek: input.strides_from_week, benchmark: input.benchmark, preRunCheck: input.pre_run_check,
   });
+  const bench = BLOCK_OPTIONS.benchmarks[generated.options.benchmark];
   return {
     note,
     proposal: {
       name: input.name, block_type: type, summary: input.summary,
-      rules: blockRules(type, generated.runs_per_week),
-      success: "At least 80% of planned runs completed, and the 30-min benchmark in the deload week compared with the last block's.",
+      rules: blockRules(type, generated.runs_per_week, generated.options),
+      success: `At least 80% of planned runs completed, and the deload week's ${bench.run_type} compared with the last test of the same kind.`,
       generated,
     },
   };

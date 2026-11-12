@@ -156,7 +156,11 @@ The database is the master copy of the running plan (`plan_weeks`,
 - **New blocks**: a block runs for a fixed number of weeks. Two stalled weeks
   in a row, or reaching the end date, means a new plan is due. It's agreed in
   the planning chat (Coach → Plan next block): the coach picks a block type
-  within the spec, the engine generates it, and Daniel locks it in.
+  within the spec, the engine generates it, and Daniel locks it in. The coach
+  can also make a block more cautious, never harder: a lower starting volume,
+  different run days, strides only from a later week, an easy-HR benchmark
+  instead of the time trial, and a knee check before every run
+  (`block_options` in `src/coach/config.js`).
 - **Daniel or other agents** can edit through the connector's write URL
   (below). Every edit needs an author and a reason.
 
