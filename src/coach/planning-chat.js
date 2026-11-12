@@ -59,7 +59,24 @@ async function planningContext() {
               count(*) filter (where d.planned_km > 0) as runs_planned,
               count(*) filter (where d.planned_km > 0 and exists (select 1 from activities a where a.plan_date = d.date)) as runs_done
        from plan_weeks w join plan_days d on d.week_start = w.start_date group by w.start_date order by w.start_date`),
-    runs: await query(`select date::text, distance_km, round(duration_s / 60) as minutes, avg_hr, max_hr, training_effect_label from activities where is_run and date >= current_date - 120 order by date`),
+    runs: await query(`select date::text, type, distance_km, round(duration_s / 60) as minutes, avg_hr, max_hr, training_effect_label, plan_date::text as counts_for from activities where is_run and date >= current_date - 120 order by date`),
+    // Every planned run against what happened: which days get done and which slip,
+    // with the coach's review of each (where any pain or niggle was noted).
+    planned_runs: await query(
+      `select d.date::text, to_char(d.date, 'Dy') as weekday, w.block, d.run_type, d.planned_min, d.status,
+              r.minutes as done_min, r.km as done_km, r.done_on, left(d.notes, 600) as coach_review
+       from plan_days d join plan_weeks w on w.start_date = d.week_start
+       left join lateral (select round(sum(duration_s) / 60) as minutes, sum(distance_km) as km, max(date)::text as done_on
+                          from activities a where a.plan_date = d.date) r on true
+       where d.planned_km > 0 and d.date between current_date - 120 and current_date order by d.date`),
+    // Completion by weekday over the last 12 weeks: the days that keep slipping.
+    completion_by_weekday: await query(
+      `select to_char(d.date, 'Dy') as weekday, count(*) as planned,
+              count(*) filter (where exists (select 1 from activities a where a.plan_date = d.date)) as done
+       from plan_days d where d.planned_km > 0 and d.date between current_date - 84 and current_date - 1
+       group by 1, extract(isodow from d.date) order by extract(isodow from d.date)`),
+    checkins: await query(`select date::text, pain_during, pain_next_morning, rpe, note from checkins where date >= current_date - 60 order by date`),
+    recent_coach_notes: await query(`select date::text, left(body, 1500) as body from coaching_notes where date >= current_date - 14 order by date`),
     recovery_by_week: await query(
       `select date_trunc('week', date)::date::text as week, round(avg(resting_hr), 1) as resting_hr, round(avg(hrv_last_night), 1) as hrv,
               round(avg(readiness_score)) as readiness, round(avg(sleep_score)) as sleep_score
@@ -93,13 +110,21 @@ async function systemPrompt() {
       "You are planning Daniel's next training block with him in a chat on his dashboard. His coach rules spec decides the " +
       "next block: the `review` in the data is the rules engine's end-of-block review (progress, recovery, decision, the " +
       "recommended block type and up to two alternatives). If review.provisional is true the block isn't over yet; say so. " +
-      "Open by explaining the review in plain words, then call prepare_block with the recommended type. Keep messages short " +
-      "and conversational. If Daniel prefers an alternative or fewer runs, call prepare_block again; the engine applies the " +
-      "guardrails and tells you if it changed his choice, and you pass that on. Daniel locks the card in himself; don't claim it is saved. " +
-      "prepare_block can also make the block more cautious, never harder: different run days, strides only from a later week, an easy-HR " +
-      "benchmark instead of the time trial, and a knee check before every run. Use them when Daniel asks, and suggest them when recent " +
-      "check-ins or his messages mention pain or a niggle. If the review recommends Return to run: the walk–run ladder (spec section 7) " +
-      "isn't built in the engine yet, so say so and offer a Base block with those cautious options instead." },
+      "Before proposing anything, study the history: planned_runs (what was planned, what was actually done and when, and your own " +
+      "review of each run, where any pain or niggle was noted), completion_by_weekday (which days keep slipping), runs (the actual " +
+      "runs, including treadmill and late runs), past_blocks, checkins and recent_coach_notes. Then call prepare_block with the block " +
+      "you'd actually suggest from that history, setting every option the history justifies:\n" +
+      "- first_week_min: start from what he has actually been running lately, not what the last plan expected.\n" +
+      "- run_days: if some weekdays keep slipping, move runs to days he does run.\n" +
+      "- strides_from_week: delay strides after a niggle or a long gap.\n" +
+      "- benchmark: easy_hr when a flat-out time trial isn't wise (e.g. a recent niggle).\n" +
+      "- pre_run_check: when a knee issue was noted recently.\n" +
+      "These options can only make the block more cautious; the engine still sets the volumes. " +
+      "Then explain the proposal in plain words: one line on what the history shows, then each choice and the evidence for it " +
+      "(dates and numbers). Keep it short. Daniel will edit it with you: when he asks for changes, call prepare_block again with " +
+      "them; the engine applies the guardrails and tells you if it changed something, and you pass that on. Daniel locks the card " +
+      "in himself; don't claim it is saved. If the review recommends Return to run: the walk–run ladder (spec section 7) isn't " +
+      "built in the engine yet, so say so and propose a cautious Base block instead." },
   ];
 }
 
